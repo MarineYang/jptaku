@@ -41,7 +41,19 @@ interface SentenceProgress {
   };
 }
 
+// Onboarding Data Structure
+export interface OnboardingData {
+  interestCategory: string;
+  interestSubCategories: string[];
+  level: string;
+  purposes: string[];
+}
+
 interface AppState {
+  // Onboarding
+  isOnboarded: boolean;
+  onboardingData: OnboardingData | null;
+  
   // User Info
   user: {
     name: string;
@@ -54,6 +66,7 @@ interface AppState {
   sentenceProgress: Record<string | number, SentenceProgress>; // Updated key type
   
   // Actions
+  completeOnboarding: (data: OnboardingData) => void;
   updateStepStatus: (id: string | number, step: 'understand' | 'speak' | 'check', completed: boolean) => void;
   markSentenceAsMemorized: (id: string | number) => void;
   resetProgress: () => void;
@@ -62,6 +75,10 @@ interface AppState {
 export const useAppStore = create<AppState>()(
   persist(
     (set) => ({
+      // Onboarding initial state
+      isOnboarded: false,
+      onboardingData: null,
+      
       user: {
         name: "지우",
         level: "Lv.3",
@@ -69,6 +86,13 @@ export const useAppStore = create<AppState>()(
         points: 350,
       },
       sentenceProgress: {},
+
+      // Complete onboarding action
+      completeOnboarding: (data) => 
+        set(() => ({
+          isOnboarded: true,
+          onboardingData: data,
+        })),
 
       updateStepStatus: (id, step, completed) => 
         set((state) => {
