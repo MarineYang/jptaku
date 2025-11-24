@@ -1,68 +1,168 @@
-# Shadcn-UI Template Usage Instructions
+# JPTAKU - 오타쿠를 위한 일본어 학습 앱
 
-## technology stack
+> 애니, 만화, 게임을 좋아하는 오타쿠들을 위한 맞춤형 일본어 회화 학습 플랫폼
 
-This project is built with:
+## 📱 프로젝트 소개
 
-- Vite
-- TypeScript
-- React
-- shadcn-ui
-- Tailwind CSS
+JPTAKU는 오타쿠 문화에 관심 있는 사용자들을 위한 일본어 학습 앱입니다. 
+AI와의 대화를 통해 실제로 사용할 수 있는 일본어 문장을 학습하고, 
+성지순례, 애니메이션, 만화 등 다양한 오타쿠 카테고리의 표현을 익힐 수 있습니다.
 
-All shadcn/ui components have been downloaded under `@/components/ui`.
+### 주요 기능
 
-## File Structure
+- 🎯 **오늘의 5문장**: 매일 새로운 일본어 문장 학습
+- 💬 **AI 회화 연습**: 학습한 문장을 실제 대화에서 사용
+- 📊 **피드백 시스템**: 문법, 발음, 자연스러움에 대한 상세한 피드백
+- 🎌 **오타쿠 카테고리**: 애니, 만화, 게임, 성지순례 등 관심사별 학습
+- 📈 **학습 진도 추적**: 카테고리별 진행도 및 사용 통계
 
-- `index.html` - HTML entry point
-- `vite.config.ts` - Vite configuration file
-- `tailwind.config.js` - Tailwind CSS configuration file
-- `package.json` - NPM dependencies and scripts
-- `src/app.tsx` - Root component of the project
-- `src/main.tsx` - Project entry point
-- `src/index.css` - Existing CSS configuration
-- `src/pages/Index.tsx` - Home page logic
+## 🛠️ 기술 스택
 
-## Components
+- **Framework**: Vite + React 19
+- **Language**: TypeScript
+- **UI Library**: shadcn/ui + Radix UI
+- **Styling**: Tailwind CSS
+- **State Management**: Zustand
+- **Routing**: React Router v6
+- **Data Fetching**: TanStack Query
+- **Animation**: Framer Motion
+- **Icons**: Lucide React
 
-- All shadcn/ui components are pre-downloaded and available at `@/components/ui`
+## 📁 프로젝트 구조
 
-## Styling
-
-- Add global styles to `src/index.css` or create new CSS files as needed
-- Use Tailwind classes for styling components
-
-## Development
-
-- Import components from `@/components/ui` in your React components
-- Customize the UI by modifying the Tailwind configuration
-
-## Note
-
-- The `@/` path alias points to the `src/` directory
-- In your typescript code, don't re-export types that you're already importing
-
-# Commands
-
-**Install Dependencies**
-
-```shell
-pnpm i
+```
+jptaku_front/
+├── src/
+│   ├── components/        # 재사용 가능한 컴포넌트
+│   │   ├── ui/           # shadcn/ui 컴포넌트
+│   │   ├── Header.tsx
+│   │   ├── BottomNav.tsx
+│   │   └── MobileLayout.tsx
+│   ├── pages/            # 페이지 컴포넌트
+│   │   ├── Home.tsx
+│   │   ├── Conversation.tsx
+│   │   ├── Feedback.tsx
+│   │   ├── MyPage.tsx
+│   │   └── ...
+│   ├── store/            # Zustand 상태 관리
+│   ├── hooks/            # 커스텀 훅
+│   ├── mock/             # 목 데이터
+│   └── lib/              # 유틸리티 함수
+├── public/               # 정적 파일
+└── ...
 ```
 
-**Add Dependencies**
+## 🚀 시작하기
 
-```shell
-pnpm add some_new_dependency
+### 사전 요구사항
 
-**Start Preview**
+- Node.js 18 이상
+- pnpm 8.10.0 이상
 
-```shell
-pnpm run dev
+### 설치
+
+```bash
+# 의존성 설치
+pnpm install
 ```
 
-**To build**
+### 개발 서버 실행
 
-```shell
-pnpm run build
+```bash
+pnpm dev
 ```
+
+개발 서버가 `http://localhost:5173`에서 실행됩니다.
+
+### 빌드
+
+```bash
+pnpm build
+```
+
+빌드된 파일은 `dist/` 폴더에 생성됩니다.
+
+### 프리뷰
+
+```bash
+pnpm preview
+```
+
+빌드된 앱을 로컬에서 미리 볼 수 있습니다.
+
+### 린트
+
+```bash
+pnpm lint
+```
+
+## 📱 페이지 구성
+
+- **Home** (`/`): 오늘의 5문장 및 학습 시작
+- **Conversation** (`/conversation`): AI와의 실시간 회화 연습
+- **Sentence Detail** (`/sentence/:id`): 문장 상세 학습 및 발음 연습
+- **Feedback** (`/feedback`): 학습 결과 및 피드백
+- **My Page** (`/mypage`): 사용자 프로필 및 학습 통계
+- **Onboarding** (`/onboarding`): 초기 사용자 설정
+
+## 🎨 UI 컴포넌트
+
+이 프로젝트는 [shadcn/ui](https://ui.shadcn.com/)의 모든 컴포넌트가 사전 설치되어 있습니다.
+컴포넌트는 `@/components/ui`에서 import하여 사용할 수 있습니다.
+
+```tsx
+import { Button } from '@/components/ui/button';
+import { Card } from '@/components/ui/card';
+```
+
+## 🔧 개발 가이드
+
+### Path Alias
+
+`@/` 경로는 `src/` 디렉토리를 가리킵니다.
+
+```tsx
+import { Component } from '@/components/Component';
+import { useStore } from '@/store/useAppStore';
+```
+
+### 스타일링
+
+- Tailwind CSS 클래스를 사용하여 스타일링
+- 전역 스타일은 `src/index.css`에 추가
+- 컴포넌트별 스타일이 필요한 경우 CSS 모듈 또는 Tailwind 사용
+
+### 상태 관리
+
+Zustand를 사용하여 전역 상태를 관리합니다.
+
+```tsx
+import { useAppStore } from '@/store/useAppStore';
+```
+
+## 📦 주요 의존성
+
+- **react**: ^19.1.1
+- **react-router-dom**: ^6.26.2
+- **@tanstack/react-query**: ^5.56.2
+- **zustand**: ^4.5.0
+- **framer-motion**: ^11.0.0
+- **lucide-react**: ^0.462.0
+- **shadcn/ui**: 다양한 @radix-ui 패키지
+
+## 🌐 배포
+
+이 프로젝트는 GitHub Pages를 통해 배포됩니다.
+Push 시 자동으로 배포가 진행됩니다.
+
+## 📝 라이선스
+
+This project is private and proprietary.
+
+## 👥 기여
+
+프로젝트에 기여하고 싶으시다면 Pull Request를 보내주세요.
+
+---
+
+**Made with ❤️ for Otaku learners**
