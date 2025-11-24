@@ -21,12 +21,16 @@ const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
   return <>{children}</>;
 };
 
-const App = () => (
-  <QueryClientProvider client={queryClient}>
-    <TooltipProvider>
-      <Toaster />
-      <BrowserRouter>
-        <Routes>
+const App = () => {
+  // GitHub Pages 배포 시 basename 설정
+  const basename = import.meta.env.BASE_URL;
+  
+  return (
+    <QueryClientProvider client={queryClient}>
+      <TooltipProvider>
+        <Toaster />
+        <BrowserRouter basename={basename}>
+          <Routes>
           <Route path="/onboarding" element={<Onboarding />} />
           
           <Route path="/" element={
@@ -60,6 +64,7 @@ const App = () => (
       </BrowserRouter>
     </TooltipProvider>
   </QueryClientProvider>
-);
+  );
+};
 
 export default App;
