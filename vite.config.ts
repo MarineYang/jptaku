@@ -6,7 +6,7 @@ import { viteSourceLocator } from '@metagptx/vite-plugin-source-locator';
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }) => ({
   // GitHub Pages 배포를 위한 base 경로 설정
-  base: process.env.GITHUB_ACTIONS ? '/jptaku_front/' : '/',
+  base: process.env.GITHUB_ACTIONS ? '/jptaku/' : '/',
   plugins: [
     viteSourceLocator({
       prefix: 'mgx',
