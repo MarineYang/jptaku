@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { MobileLayout } from '@/components/MobileLayout';
 import { BottomNav } from '@/components/BottomNav';
 import { Header } from '@/components/Header';
-import { todaySentences, yesterdaySentences } from '@/mock/todaySentences';
+import { yesterdaySentences } from '@/mock/todaySentences';
 import { userMock } from '@/mock/userMock';
 import { useAppStore, DailySentence } from '@/store/useAppStore';
 import { Play, ChevronRight, Flame, Circle, CheckCircle2, Disc, Pause, Trophy } from 'lucide-react';
@@ -14,7 +14,51 @@ import { useNavigate } from 'react-router-dom';
 export default function Home() {
   const navigate = useNavigate();
   const sentenceProgress = useAppStore((state) => state.sentenceProgress);
+  const accessToken = useAppStore((state) => state.accessToken);
+  const todaySentences = useAppStore((state) => state.todaySentences);
+  const setTodaySentences = useAppStore((state) => state.setTodaySentences);
   const [playingId, setPlayingId] = useState<string | number | null>(null);
+
+  // Fetch today's sentences from API
+  useEffect(() => {
+    const fetchTodaySentences = async () => {
+      if (!accessToken) {
+        return;
+      }
+
+      try {
+        const response = await fetch('http://localhost:30001/api/sentences/today', {
+          method: 'GET',
+          headers: {
+            'Authorization': `Bearer ${accessToken}`,
+          },
+        });
+
+        if (response.ok) {
+          const responseData = await response.json();
+          // API 응답: { success: true, data: { sentences: [...] } }
+          const sentencesData = responseData.data?.sentences || responseData.sentences || responseData || [];
+          const sentences: DailySentence[] = sentencesData.map((s: Record<string, unknown>) => ({
+            id: s.id,
+            japanese: s.jp || s.japanese || s.sentence || '',
+            reading: s.reading || s.furigana || '',
+            meaning: s.kr || s.meaning || s.translation || '',
+            romaji: s.romaji || '',
+            tags: s.tags || [],
+            words: s.words || [],
+            grammar: s.grammar || { pattern: '', description: '' },
+            examples: s.examples || [],
+            quiz: s.quiz || { type: 'meaning', question: '', options: [], answer: '' },
+          }));
+          setTodaySentences(sentences);
+        }
+      } catch (err) {
+        console.error('Failed to fetch today sentences:', err);
+      }
+    };
+
+    fetchTodaySentences();
+  }, [accessToken, setTodaySentences]);
 
   // Cleanup audio on unmount
   useEffect(() => {

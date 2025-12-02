@@ -7,14 +7,30 @@ import Home from './pages/Home';
 import Conversation from './pages/Conversation';
 import Feedback from './pages/Feedback';
 import MyPage from './pages/MyPage';
+import Login from './pages/Login';
 import Onboarding from './pages/Onboarding';
 import SentenceDetail from './pages/SentenceDetail';
 import NotFound from './pages/NotFound';
 
 const queryClient = new QueryClient();
 
+// 로그인 필요 라우트
+const AuthRoute = ({ children }: { children: React.ReactNode }) => {
+  const isLoggedIn = useAppStore((state) => state.isLoggedIn);
+  if (!isLoggedIn) {
+    return <Navigate to="/login" replace />;
+  }
+  return <>{children}</>;
+};
+
+// 온보딩 필요 라우트 (로그인 + 온보딩 완료 필요)
 const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
+  const isLoggedIn = useAppStore((state) => state.isLoggedIn);
   const isOnboarded = useAppStore((state) => state.isOnboarded);
+
+  if (!isLoggedIn) {
+    return <Navigate to="/login" replace />;
+  }
   if (!isOnboarded) {
     return <Navigate to="/onboarding" replace />;
   }
@@ -28,7 +44,12 @@ const App = () => {
         <Toaster />
         <HashRouter>
           <Routes>
-          <Route path="/onboarding" element={<Onboarding />} />
+          <Route path="/login" element={<Login />} />
+          <Route path="/onboarding" element={
+            <AuthRoute>
+              <Onboarding />
+            </AuthRoute>
+          } />
           
           <Route path="/" element={
             <ProtectedRoute>
