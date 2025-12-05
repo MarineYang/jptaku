@@ -1,33 +1,34 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 
-// Daily Sentence Data Structure
+// Daily Sentence Data Structure (API 응답 구조)
 export interface DailySentence {
-  id: string | number; // Updated to support string IDs
-  japanese: string;
-  reading: string;
-  meaning: string;
+  id: string | number;
+  japanese: string;      // jp
+  reading: string;       // furigana (optional)
+  meaning: string;       // kr
   romaji?: string;
   tags?: string[];
+  categories?: number[];
+  memorized?: boolean;   // 백엔드에서 제공하는 암기 상태
   words: {
-    term: string;
-    reading?: string;
-    meaning: string;
+    japanese: string;    // 단어
+    reading: string;     // 히라가나
+    meaning: string;     // 뜻
+    part_of?: string;    // 품사
   }[];
-  grammar: {
-    pattern: string;
-    description: string;
-  };
-  examples: {
-    japanese: string;
-    reading: string;
-    meaning: string;
-  }[];
+  grammar: string[];     // ["~ました: 과거형을 나타내는 표현"]
+  examples: string[];    // ["昨日は映画を見ました。", "..."]
   quiz: {
-    type: 'meaning' | 'blank' | 'order';
-    question: string;
-    options: string[];
-    answer: string;
+    fill_blank?: {
+      question_jp: string;
+      options: string[];
+      answer: string;
+    };
+    ordering?: {
+      fragments: string[];
+      correct_order: number[];
+    };
   };
 }
 
@@ -199,6 +200,12 @@ export const useAppStore = create<AppState>()(
         const state = get();
         const token = state.accessToken;
 
+        // 먼저 상태 업데이트 (UI 즉시 반영)
+        set(() => ({
+          isOnboarded: true,
+          onboardingData: data,
+        }));
+
         // Convert UI data to API format
         const level = LEVEL_MAP[data.level] ?? 2;
         const interests: number[] = [];
@@ -209,30 +216,23 @@ export const useAppStore = create<AppState>()(
         });
         const purposes = data.purposes.map((p) => PURPOSE_MAP[p]).filter(Boolean);
 
-        // Call onboarding API
+        // Call onboarding API (백그라운드에서 처리, await 없이)
         if (token) {
-          try {
-            await fetch('http://localhost:30001/api/user/onboarding', {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${token}`,
-              },
-              body: JSON.stringify({
-                level,
-                interests,
-                purposes,
-              }),
-            });
-          } catch (err) {
+          fetch('http://localhost:30001/api/user/onboarding', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${token}`,
+            },
+            body: JSON.stringify({
+              level,
+              interests,
+              purposes,
+            }),
+          }).catch((err) => {
             console.error('Onboarding API error:', err);
-          }
+          });
         }
-
-        set(() => ({
-          isOnboarded: true,
-          onboardingData: data,
-        }));
       },
 
       // Reset onboarding action

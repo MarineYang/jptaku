@@ -2,14 +2,33 @@ import { useState, useEffect } from 'react';
 import { MobileLayout } from '@/components/MobileLayout';
 import { BottomNav } from '@/components/BottomNav';
 import { Header } from '@/components/Header';
-import { yesterdaySentences } from '@/mock/todaySentences';
 import { userMock } from '@/mock/userMock';
 import { useAppStore, DailySentence } from '@/store/useAppStore';
-import { Play, ChevronRight, Flame, Circle, CheckCircle2, Disc, Pause, Trophy } from 'lucide-react';
+import { Play, ChevronRight, Flame, Circle, CheckCircle2, Disc, Pause, Trophy, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Progress } from '@/components/ui/progress';
 import { useNavigate } from 'react-router-dom';
+
+// Skeleton component for loading state
+const SentenceSkeleton = () => (
+  <div className="space-y-3 mt-4">
+    {[1, 2, 3, 4, 5].map((i) => (
+      <Card key={i} className="border-transparent bg-white shadow-sm">
+        <CardContent className="p-5 flex items-center justify-between gap-4">
+          <div className="flex-1 space-y-2 min-w-0">
+            <div className="h-5 bg-gray-200 rounded animate-pulse w-3/4"></div>
+            <div className="h-4 bg-gray-100 rounded animate-pulse w-1/2"></div>
+          </div>
+          <div className="flex items-center gap-3 flex-shrink-0">
+            <div className="h-8 w-8 bg-gray-100 rounded-full animate-pulse"></div>
+            <div className="h-6 w-6 bg-gray-100 rounded-full animate-pulse"></div>
+          </div>
+        </CardContent>
+      </Card>
+    ))}
+  </div>
+);
 
 export default function Home() {
   const navigate = useNavigate();
@@ -18,12 +37,21 @@ export default function Home() {
   const todaySentences = useAppStore((state) => state.todaySentences);
   const setTodaySentences = useAppStore((state) => state.setTodaySentences);
   const [playingId, setPlayingId] = useState<string | number | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [historySentences, setHistorySentences] = useState<DailySentence[]>([]);
+  const [isHistoryLoading, setIsHistoryLoading] = useState(true);
 
   // Fetch today's sentences from API
   useEffect(() => {
     const fetchTodaySentences = async () => {
       if (!accessToken) {
+        setIsLoading(false);
         return;
+      }
+
+      // 이미 데이터가 있으면 로딩 표시 안함 (캐시된 데이터 활용)
+      if (todaySentences.length > 0) {
+        setIsLoading(false);
       }
 
       try {
@@ -40,25 +68,75 @@ export default function Home() {
           const sentencesData = responseData.data?.sentences || responseData.sentences || responseData || [];
           const sentences: DailySentence[] = sentencesData.map((s: Record<string, unknown>) => ({
             id: s.id,
-            japanese: s.jp || s.japanese || s.sentence || '',
-            reading: s.reading || s.furigana || '',
-            meaning: s.kr || s.meaning || s.translation || '',
-            romaji: s.romaji || '',
-            tags: s.tags || [],
-            words: s.words || [],
-            grammar: s.grammar || { pattern: '', description: '' },
-            examples: s.examples || [],
-            quiz: s.quiz || { type: 'meaning', question: '', options: [], answer: '' },
+            japanese: (s.jp || s.japanese || '') as string,
+            reading: (s.reading || s.furigana || '') as string,
+            meaning: (s.kr || s.meaning || '') as string,
+            romaji: (s.romaji || '') as string,
+            tags: (s.tags || []) as string[],
+            categories: (s.categories || []) as number[],
+            memorized: (s.memorized || false) as boolean,
+            words: (s.words || []) as DailySentence['words'],
+            grammar: (s.grammar || []) as string[],
+            examples: (s.examples || []) as string[],
+            quiz: (s.quiz || {}) as DailySentence['quiz'],
           }));
           setTodaySentences(sentences);
         }
       } catch (err) {
         console.error('Failed to fetch today sentences:', err);
+      } finally {
+        setIsLoading(false);
       }
     };
 
     fetchTodaySentences();
   }, [accessToken, setTodaySentences]);
+
+  // Fetch history sentences from API
+  useEffect(() => {
+    const fetchHistorySentences = async () => {
+      if (!accessToken) {
+        setIsHistoryLoading(false);
+        return;
+      }
+
+      try {
+        const response = await fetch('http://localhost:30001/api/sentences/history?page=1&per_page=5', {
+          method: 'GET',
+          headers: {
+            'Authorization': `Bearer ${accessToken}`,
+          },
+        });
+
+        if (response.ok) {
+          const responseData = await response.json();
+          // API 응답: { success: true, data: { history: { date, sentences: [...] } } }
+          const sentencesData = responseData.data?.history?.sentences || responseData.data?.sentences || responseData.sentences || [];
+          const sentences: DailySentence[] = sentencesData.map((s: Record<string, unknown>) => ({
+            id: s.id,
+            japanese: (s.jp || s.japanese || '') as string,
+            reading: (s.reading || s.furigana || '') as string,
+            meaning: (s.kr || s.meaning || '') as string,
+            romaji: (s.romaji || '') as string,
+            tags: (s.tags || []) as string[],
+            categories: (s.categories || []) as number[],
+            memorized: (s.memorized || false) as boolean,
+            words: (s.words || []) as DailySentence['words'],
+            grammar: (s.grammar || []) as string[],
+            examples: (s.examples || []) as string[],
+            quiz: (s.quiz || {}) as DailySentence['quiz'],
+          }));
+          setHistorySentences(sentences);
+        }
+      } catch (err) {
+        console.error('Failed to fetch history sentences:', err);
+      } finally {
+        setIsHistoryLoading(false);
+      }
+    };
+
+    fetchHistorySentences();
+  }, [accessToken]);
 
   // Cleanup audio on unmount
   useEffect(() => {
@@ -67,11 +145,11 @@ export default function Home() {
     };
   }, []);
 
-  // Calculate progress for "Today's 5 Sentences"
-  const memorizedCount = todaySentences.filter(
-    (s) => sentenceProgress[s.id]?.status === 'memorized'
-  ).length;
-  const progressPercentage = (memorizedCount / todaySentences.length) * 100;
+  // Calculate progress for "Today's 5 Sentences" - API memorized 필드 사용
+  const memorizedCount = todaySentences.filter((s) => s.memorized).length;
+  const progressPercentage = todaySentences.length > 0
+    ? (memorizedCount / todaySentences.length) * 100
+    : 0;
 
   const handlePlay = (e: React.MouseEvent, item: DailySentence) => {
     e.stopPropagation();
@@ -103,21 +181,21 @@ export default function Home() {
     window.speechSynthesis.speak(utterance);
   };
 
-  const getStatusIcon = (id: string | number) => {
-    const status = sentenceProgress[id]?.status || 'not_started';
-    
-    if (status === 'memorized') {
+  const getStatusIcon = (item: DailySentence) => {
+    // API의 memorized 필드 사용
+    if (item.memorized) {
       return <CheckCircle2 size={24} className="text-blue-500 fill-blue-100" />;
-    } else if (status === 'in_progress') {
-      return <Disc size={24} className="text-blue-500" />; // Half-filled circle representation
-    } else {
-      return <Circle size={24} className="text-gray-300" />;
     }
+    // 로컬 진행 상태 확인 (학습 중)
+    const localStatus = sentenceProgress[item.id]?.status;
+    if (localStatus === 'in_progress') {
+      return <Disc size={24} className="text-blue-500" />;
+    }
+    return <Circle size={24} className="text-gray-300" />;
   };
 
-  const getCardStyle = (id: string | number) => {
-    const status = sentenceProgress[id]?.status || 'not_started';
-    if (status === 'memorized') {
+  const getCardStyle = (item: DailySentence) => {
+    if (item.memorized) {
       return "border-blue-100 bg-blue-50/50 shadow-sm";
     }
     return "border-transparent bg-white shadow-sm hover:shadow-md";
@@ -127,11 +205,11 @@ export default function Home() {
     <div className="space-y-3 mt-4">
       {sentences.map((item) => {
         const isPlaying = playingId === item.id;
-        
+
         return (
-          <Card 
-            key={item.id} 
-            className={`transition-all duration-200 cursor-pointer ${getCardStyle(item.id)}`}
+          <Card
+            key={item.id}
+            className={`transition-all duration-200 cursor-pointer ${getCardStyle(item)}`}
             onClick={() => navigate(`/sentence/${item.id}`)}
           >
             <CardContent className="p-5 flex items-center justify-between gap-4">
@@ -172,7 +250,7 @@ export default function Home() {
                   )}
                 </Button>
                 
-                {getStatusIcon(item.id)}
+                {getStatusIcon(item)}
               </div>
             </CardContent>
           </Card>
@@ -243,16 +321,25 @@ export default function Home() {
 
           {/* Progress Bar */}
           <Progress value={progressPercentage} className="h-2 bg-gray-200" indicatorClassName="bg-blue-500" />
-          
+
           {/* Sentence List */}
-          {renderSentenceList(todaySentences)}
+          {isLoading && todaySentences.length === 0 ? (
+            <SentenceSkeleton />
+          ) : todaySentences.length === 0 ? (
+            <div className="mt-4 text-center py-8 text-gray-400">
+              <Loader2 className="h-8 w-8 animate-spin mx-auto mb-2 text-blue-500" />
+              <p className="text-sm">오늘의 문장을 준비하고 있어요...</p>
+            </div>
+          ) : (
+            renderSentenceList(todaySentences)
+          )}
         </div>
 
-        {/* Yesterday's 5 Sentences Section */}
+        {/* Yesterday's Sentences Section */}
         <div className="space-y-4 pt-4 border-t border-gray-200">
           <div className="flex justify-between items-end">
             <div>
-              <h3 className="text-xl font-bold text-gray-900 mb-1">어제 외운 문장</h3>
+              <h3 className="text-xl font-bold text-gray-900 mb-1">지난 학습 문장</h3>
               <p className="text-sm text-gray-500">
                 복습이 중요해요!
               </p>
@@ -261,9 +348,17 @@ export default function Home() {
               전체 보기 <ChevronRight size={16} />
             </Button>
           </div>
-          
+
           {/* Sentence List */}
-          {renderSentenceList(yesterdaySentences)}
+          {isHistoryLoading ? (
+            <SentenceSkeleton />
+          ) : historySentences.length === 0 ? (
+            <div className="mt-4 text-center py-8 text-gray-400">
+              <p className="text-sm">지난 학습 문장이 없습니다.</p>
+            </div>
+          ) : (
+            renderSentenceList(historySentences)
+          )}
         </div>
       </div>
       <BottomNav />
