@@ -55,7 +55,7 @@ export default function Home() {
       }
 
       try {
-        const response = await fetch('http://localhost:30001/api/sentences/today', {
+        const response = await fetch(`${import.meta.env.VITE_API_URL}/api/sentences/today`, {
           method: 'GET',
           headers: {
             'Authorization': `Bearer ${accessToken}`,
@@ -101,7 +101,7 @@ export default function Home() {
       }
 
       try {
-        const response = await fetch('http://localhost:30001/api/sentences/history?page=1&per_page=5', {
+        const response = await fetch(`${import.meta.env.VITE_API_URL}/api/sentences/history?page=1&per_page=5`, {
           method: 'GET',
           headers: {
             'Authorization': `Bearer ${accessToken}`,

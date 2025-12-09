@@ -68,7 +68,7 @@ export default function SentenceDetail() {
         body.ordering_answer = orderingAnswer;
       }
 
-      const response = await fetch('http://localhost:30001/api/learning/quiz', {
+      const response = await fetch(`${import.meta.env.VITE_API_URL}/api/learning/quiz`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

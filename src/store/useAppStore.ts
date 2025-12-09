@@ -218,7 +218,7 @@ export const useAppStore = create<AppState>()(
 
         // Call onboarding API (백그라운드에서 처리, await 없이)
         if (token) {
-          fetch('http://localhost:30001/api/user/onboarding', {
+          fetch(`${import.meta.env.VITE_API_URL}/api/user/onboarding`, {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
