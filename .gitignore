@@ -1,42 +1,51 @@
-# Logs
-logs
-*.log
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-pnpm-debug.log*
-lerna-debug.log*
-
-# Editor directories and files
-.vscode/*
-!.vscode/extensions.json
-.idea
-.DS_Store
-*.suo
-*.ntvs*
-*.njsproj
-*.sln
-*.sw?
-
 # Dependencies
-node_modules
-dist
-dist-ssr
+node_modules/
 
-# Build output
-*.local
+# Expo
+.expo/
+dist/
+web-build/
+
+# Native builds
+ios/
+android/
+*.jks
+*.p8
+*.p12
+*.key
+*.mobileprovision
+*.orig.*
+
+# Metro
+.metro-health-check*
+
+# Debug
+npm-debug.*
+yarn-debug.*
+yarn-error.*
 
 # Environment variables
 .env
 .env.local
-.env.production.local
-.env.development.local
+.env.*.local
+
+# macOS
+.DS_Store
+*.pem
+
+# Local History for VSCode
+.history/
+
+# Editor
+.vscode/
+.idea/
+*.sw?
 
 # Testing
-coverage
+coverage/
+
+# Turborepo
+.turbo/
 
 # Misc
-.cache
-.parcel-cache
-.next
-.turbo
+*.log

@@ -1,11 +1,11 @@
 # JPTAKU - 오타쿠를 위한 일본어 학습 앱
 
-> 애니, 만화, 게임을 좋아하는 오타쿠들을 위한 맞춤형 일본어 회화 학습 플랫폼
+> 애니, 만화, 게임을 좋아하는 오타쿠들을 위한 맞춤형 일본어 회화 학습 앱
 
 ## 📱 프로젝트 소개
 
-JPTAKU는 오타쿠 문화에 관심 있는 사용자들을 위한 일본어 학습 앱입니다. 
-AI와의 대화를 통해 실제로 사용할 수 있는 일본어 문장을 학습하고, 
+JPTAKU는 오타쿠 문화에 관심 있는 사용자들을 위한 일본어 학습 앱입니다.
+AI와의 대화를 통해 실제로 사용할 수 있는 일본어 문장을 학습하고,
 성지순례, 애니메이션, 만화 등 다양한 오타쿠 카테고리의 표현을 익힐 수 있습니다.
 
 ### 주요 기능
@@ -18,38 +18,35 @@ AI와의 대화를 통해 실제로 사용할 수 있는 일본어 문장을 학
 
 ## 🛠️ 기술 스택
 
-- **Framework**: Vite + React 19
+- **Framework**: Expo (React Native)
 - **Language**: TypeScript
-- **UI Library**: shadcn/ui + Radix UI
-- **Styling**: Tailwind CSS
-- **State Management**: Zustand
-- **Routing**: React Router v6
+- **Navigation**: React Navigation
+- **State Management**: Zustand + AsyncStorage
 - **Data Fetching**: TanStack Query
-- **Animation**: Framer Motion
-- **Icons**: Lucide React
+- **TTS**: Expo Speech
+- **Auth**: Expo Web Browser (OAuth)
 
 ## 📁 프로젝트 구조
 
 ```
-jptaku_front/
+jptaku/
+├── App.tsx                    # 앱 진입점
+├── app.json                   # Expo 설정
 ├── src/
-│   ├── components/        # 재사용 가능한 컴포넌트
-│   │   ├── ui/           # shadcn/ui 컴포넌트
-│   │   ├── Header.tsx
-│   │   ├── BottomNav.tsx
-│   │   └── MobileLayout.tsx
-│   ├── pages/            # 페이지 컴포넌트
-│   │   ├── Home.tsx
-│   │   ├── Conversation.tsx
-│   │   ├── Feedback.tsx
-│   │   ├── MyPage.tsx
-│   │   └── ...
-│   ├── store/            # Zustand 상태 관리
-│   ├── hooks/            # 커스텀 훅
-│   ├── mock/             # 목 데이터
-│   └── lib/              # 유틸리티 함수
-├── public/               # 정적 파일
-└── ...
+│   ├── navigation/           # React Navigation 설정
+│   │   └── AppNavigator.tsx
+│   ├── screens/              # 화면 컴포넌트
+│   │   ├── LoginScreen.tsx
+│   │   ├── OnboardingScreen.tsx
+│   │   ├── HomeScreen.tsx
+│   │   ├── SentenceDetailScreen.tsx
+│   │   ├── ConversationScreen.tsx
+│   │   ├── FeedbackScreen.tsx
+│   │   └── MyPageScreen.tsx
+│   └── store/                # Zustand 상태 관리
+│       └── useAppStore.ts
+├── assets/                   # 앱 아이콘, 스플래시
+└── ios/                      # iOS 네이티브 빌드
 ```
 
 ## 🚀 시작하기
@@ -57,111 +54,67 @@ jptaku_front/
 ### 사전 요구사항
 
 - Node.js 18 이상
-- pnpm 8.10.0 이상
+- Xcode (iOS 빌드용)
+- Android Studio (Android 빌드용)
 
 ### 설치
 
 ```bash
 # 의존성 설치
-pnpm install
+npm install
 ```
 
 ### 개발 서버 실행
 
 ```bash
-pnpm dev
+# Expo 개발 서버 시작
+npx expo start
+
+# iOS 시뮬레이터에서 실행
+npx expo run:ios
+
+# Android 에뮬레이터에서 실행
+npx expo run:android
 ```
 
-개발 서버가 `http://localhost:5173`에서 실행됩니다.
+### 환경 변수 설정
 
-### 빌드
+`.env` 파일을 생성하고 API URL을 설정하세요:
 
-```bash
-pnpm build
+```
+EXPO_PUBLIC_API_URL=https://your-api-url.com
 ```
 
-빌드된 파일은 `dist/` 폴더에 생성됩니다.
+## 📱 화면 구성
 
-### 프리뷰
+- **Login**: Google OAuth 로그인
+- **Onboarding**: 관심사, 레벨, 학습 목적 설정
+- **Home**: 오늘의 5문장 및 학습 시작
+- **SentenceDetail**: 문장 상세 학습 및 퀴즈
+- **Conversation**: AI와의 실시간 회화 연습
+- **Feedback**: 학습 결과 및 피드백
+- **MyPage**: 사용자 프로필 및 학습 통계
 
-```bash
-pnpm preview
-```
+## 🔗 딥링크
 
-빌드된 앱을 로컬에서 미리 볼 수 있습니다.
+앱은 `jptaku://` 스키마를 지원합니다:
 
-### 린트
-
-```bash
-pnpm lint
-```
-
-## 📱 페이지 구성
-
-- **Home** (`/`): 오늘의 5문장 및 학습 시작
-- **Conversation** (`/conversation`): AI와의 실시간 회화 연습
-- **Sentence Detail** (`/sentence/:id`): 문장 상세 학습 및 발음 연습
-- **Feedback** (`/feedback`): 학습 결과 및 피드백
-- **My Page** (`/mypage`): 사용자 프로필 및 학습 통계
-- **Onboarding** (`/onboarding`): 초기 사용자 설정
-
-## 🎨 UI 컴포넌트
-
-이 프로젝트는 [shadcn/ui](https://ui.shadcn.com/)의 모든 컴포넌트가 사전 설치되어 있습니다.
-컴포넌트는 `@/components/ui`에서 import하여 사용할 수 있습니다.
-
-```tsx
-import { Button } from '@/components/ui/button';
-import { Card } from '@/components/ui/card';
-```
-
-## 🔧 개발 가이드
-
-### Path Alias
-
-`@/` 경로는 `src/` 디렉토리를 가리킵니다.
-
-```tsx
-import { Component } from '@/components/Component';
-import { useStore } from '@/store/useAppStore';
-```
-
-### 스타일링
-
-- Tailwind CSS 클래스를 사용하여 스타일링
-- 전역 스타일은 `src/index.css`에 추가
-- 컴포넌트별 스타일이 필요한 경우 CSS 모듈 또는 Tailwind 사용
-
-### 상태 관리
-
-Zustand를 사용하여 전역 상태를 관리합니다.
-
-```tsx
-import { useAppStore } from '@/store/useAppStore';
-```
+- `jptaku://auth/callback` - OAuth 콜백
+- `jptaku://sentence/:id` - 문장 상세
 
 ## 📦 주요 의존성
 
-- **react**: ^19.1.1
-- **react-router-dom**: ^6.26.2
-- **@tanstack/react-query**: ^5.56.2
+- **expo**: ~54.0.0
+- **react-native**: 0.79.x
+- **@react-navigation/native**: ^7.x
 - **zustand**: ^4.5.0
-- **framer-motion**: ^11.0.0
-- **lucide-react**: ^0.462.0
-- **shadcn/ui**: 다양한 @radix-ui 패키지
-
-## 🌐 배포
-
-이 프로젝트는 GitHub Pages를 통해 배포됩니다.
-Push 시 자동으로 배포가 진행됩니다.
+- **@tanstack/react-query**: ^5.x
+- **expo-speech**: TTS
+- **expo-web-browser**: OAuth
 
 ## 📝 라이선스
 
 This project is private and proprietary.
-
-## 👥 기여
-
-프로젝트에 기여하고 싶으시다면 Pull Request를 보내주세요.
 
 ---
 
