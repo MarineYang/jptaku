@@ -1,20 +1,49 @@
-import React from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Alert } from 'react-native';
+import React, { useEffect } from 'react';
+import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Alert, Switch, Image } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
-import { useAppStore } from '../store/useAppStore';
+import { useAppStore, OnboardingCategory, Level } from '../store/useAppStore';
 
 type RootStackParamList = {
   Login: undefined;
+  Onboarding: undefined;
+};
+
+// Category and Level label mappings
+const CATEGORY_LABELS: Record<number, string> = {
+  [OnboardingCategory.ANIME]: '애니',
+  [OnboardingCategory.GAME]: '게임',
+  [OnboardingCategory.MUSIC]: '음악',
+  [OnboardingCategory.MOVIE]: '영화',
+  [OnboardingCategory.DRAMA]: '드라마',
+};
+
+const LEVEL_LABELS: Record<number, string> = {
+  [Level.N5]: 'N5',
+  [Level.N4]: 'N4',
+  [Level.N3]: 'N3',
 };
 
 export default function MyPageScreen() {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
+
+  // Store state
   const user = useAppStore((state) => state.user);
   const onboardingData = useAppStore((state) => state.onboardingData);
+  const todayStats = useAppStore((state) => state.todayStats);
+
+  // Store actions
   const logout = useAppStore((state) => state.logout);
+  const fetchUser = useAppStore((state) => state.fetchUser);
+  const fetchTodayStats = useAppStore((state) => state.fetchTodayStats);
+  const updateSettings = useAppStore((state) => state.updateSettings);
+
+  useEffect(() => {
+    fetchUser();
+    fetchTodayStats();
+  }, []);
 
   const handleLogout = () => {
     Alert.alert(
@@ -34,6 +63,61 @@ export default function MyPageScreen() {
     );
   };
 
+  const handleToggleNotification = async (value: boolean) => {
+    await updateSettings({ notification_enabled: value });
+  };
+
+  const handleToggleRomaji = async (value: boolean) => {
+    await updateSettings({ show_romaji: value });
+  };
+
+  const handleToggleTranslation = async (value: boolean) => {
+    await updateSettings({ show_translation: value });
+  };
+
+  const handleEditOnboarding = () => {
+    Alert.alert(
+      '학습 설정 변경',
+      '관심 분야와 레벨을 다시 설정하시겠습니까?',
+      [
+        { text: '취소', style: 'cancel' },
+        {
+          text: '변경하기',
+          onPress: () => {
+            navigation.navigate('Onboarding');
+          },
+        },
+      ]
+    );
+  };
+
+  const getInitial = () => {
+    if (user?.name) {
+      return user.name.charAt(0).toUpperCase();
+    }
+    return 'U';
+  };
+
+  const getLevelLabel = () => {
+    if (onboardingData?.level) {
+      return LEVEL_LABELS[onboardingData.level] || `N${onboardingData.level}`;
+    }
+    if (user?.onboarding?.level) {
+      return user.onboarding.level.toUpperCase();
+    }
+    return 'N5';
+  };
+
+  const getCategoryLabels = () => {
+    if (onboardingData?.categories) {
+      return onboardingData.categories.map((cat) => CATEGORY_LABELS[cat] || String(cat));
+    }
+    if (user?.onboarding?.categories) {
+      return user.onboarding.categories;
+    }
+    return [];
+  };
+
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       {/* Header */}
@@ -45,82 +129,138 @@ export default function MyPageScreen() {
         {/* Profile Card */}
         <View style={styles.profileCard}>
           <View style={styles.avatarContainer}>
-            <View style={styles.avatar}>
-              <Text style={styles.avatarText}>{user.name.charAt(0)}</Text>
-            </View>
+            {user?.profile_image ? (
+              <Image source={{ uri: user.profile_image }} style={styles.avatarImage} />
+            ) : (
+              <View style={styles.avatar}>
+                <Text style={styles.avatarText}>{getInitial()}</Text>
+              </View>
+            )}
             <View style={styles.levelBadge}>
-              <Text style={styles.levelBadgeText}>{user.level}</Text>
+              <Text style={styles.levelBadgeText}>{getLevelLabel()}</Text>
             </View>
           </View>
-          <Text style={styles.userName}>{user.name}</Text>
+          <Text style={styles.userName}>{user?.name || '사용자'}</Text>
+          {user?.email && <Text style={styles.userEmail}>{user.email}</Text>}
+
           <View style={styles.statsRow}>
             <View style={styles.statItem}>
               <Ionicons name="flame" size={20} color="#F97316" />
-              <Text style={styles.statValue}>{user.streak}일</Text>
+              <Text style={styles.statValue}>{todayStats?.current_streak || 0}일</Text>
               <Text style={styles.statLabel}>연속 학습</Text>
             </View>
             <View style={styles.statDivider} />
             <View style={styles.statItem}>
-              <Ionicons name="star" size={20} color="#EAB308" />
-              <Text style={styles.statValue}>{user.points}</Text>
-              <Text style={styles.statLabel}>포인트</Text>
+              <Ionicons name="chatbubbles" size={20} color="#3B82F6" />
+              <Text style={styles.statValue}>{todayStats?.total_sessions || 0}회</Text>
+              <Text style={styles.statLabel}>총 세션</Text>
+            </View>
+            <View style={styles.statDivider} />
+            <View style={styles.statItem}>
+              <Ionicons name="time" size={20} color="#10B981" />
+              <Text style={styles.statValue}>{todayStats?.total_learning_minutes || 0}분</Text>
+              <Text style={styles.statLabel}>학습 시간</Text>
             </View>
           </View>
         </View>
 
         {/* Learning Info */}
-        {onboardingData && (
-          <View style={styles.section}>
+        <View style={styles.section}>
+          <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>학습 설정</Text>
-            <View style={styles.infoCard}>
-              <View style={styles.infoRow}>
-                <Text style={styles.infoLabel}>관심 분야</Text>
-                <Text style={styles.infoValue}>
-                  {onboardingData.interestCategory === 'anime' && '애니/만화'}
-                  {onboardingData.interestCategory === 'game' && '게임'}
-                  {onboardingData.interestCategory === 'music' && '음악/Jpop/버튜버'}
-                  {onboardingData.interestCategory === 'lifestyle' && '오타쿠 라이프스타일'}
-                  {onboardingData.interestCategory === 'situation' && '실전 오타쿠 상황'}
-                </Text>
+            <TouchableOpacity onPress={handleEditOnboarding}>
+              <Text style={styles.editButton}>수정</Text>
+            </TouchableOpacity>
+          </View>
+          <View style={styles.infoCard}>
+            <View style={styles.infoRow}>
+              <Text style={styles.infoLabel}>일본어 레벨</Text>
+              <View style={styles.levelTag}>
+                <Text style={styles.levelTagText}>{getLevelLabel()}</Text>
               </View>
-              <View style={styles.infoRow}>
-                <Text style={styles.infoLabel}>일본어 레벨</Text>
-                <Text style={styles.infoValue}>{onboardingData.level.toUpperCase()}</Text>
-              </View>
-              <View style={styles.subCategoriesContainer}>
-                <Text style={styles.infoLabel}>세부 카테고리</Text>
-                <View style={styles.tagsContainer}>
-                  {onboardingData.interestSubCategories.map((sub, idx) => (
-                    <View key={idx} style={styles.tag}>
-                      <Text style={styles.tagText}>{sub}</Text>
-                    </View>
-                  ))}
-                </View>
+            </View>
+            <View style={styles.infoDivider} />
+            <View style={styles.subCategoriesContainer}>
+              <Text style={styles.infoLabel}>관심 분야</Text>
+              <View style={styles.tagsContainer}>
+                {getCategoryLabels().map((label, idx) => (
+                  <View key={idx} style={styles.tag}>
+                    <Text style={styles.tagText}>{label}</Text>
+                  </View>
+                ))}
+                {getCategoryLabels().length === 0 && (
+                  <Text style={styles.emptyText}>설정되지 않음</Text>
+                )}
               </View>
             </View>
           </View>
-        )}
+        </View>
+
+        {/* Display Settings */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>표시 설정</Text>
+          <View style={styles.menuCard}>
+            <View style={styles.settingItem}>
+              <View style={styles.settingInfo}>
+                <Ionicons name="text-outline" size={22} color="#6B7280" />
+                <Text style={styles.settingText}>로마자 표시</Text>
+              </View>
+              <Switch
+                value={user?.settings?.show_romaji ?? true}
+                onValueChange={handleToggleRomaji}
+                trackColor={{ false: '#E5E7EB', true: '#BFDBFE' }}
+                thumbColor={user?.settings?.show_romaji ? '#2563EB' : '#9CA3AF'}
+              />
+            </View>
+            <View style={styles.settingItem}>
+              <View style={styles.settingInfo}>
+                <Ionicons name="language-outline" size={22} color="#6B7280" />
+                <Text style={styles.settingText}>번역 표시</Text>
+              </View>
+              <Switch
+                value={user?.settings?.show_translation ?? true}
+                onValueChange={handleToggleTranslation}
+                trackColor={{ false: '#E5E7EB', true: '#BFDBFE' }}
+                thumbColor={user?.settings?.show_translation ? '#2563EB' : '#9CA3AF'}
+              />
+            </View>
+          </View>
+        </View>
+
+        {/* Notification Settings */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>알림 설정</Text>
+          <View style={styles.menuCard}>
+            <View style={styles.settingItem}>
+              <View style={styles.settingInfo}>
+                <Ionicons name="notifications-outline" size={22} color="#6B7280" />
+                <Text style={styles.settingText}>학습 알림</Text>
+              </View>
+              <Switch
+                value={user?.settings?.notification_enabled ?? true}
+                onValueChange={handleToggleNotification}
+                trackColor={{ false: '#E5E7EB', true: '#BFDBFE' }}
+                thumbColor={user?.settings?.notification_enabled ? '#2563EB' : '#9CA3AF'}
+              />
+            </View>
+            {user?.settings?.notification_enabled && (
+              <View style={styles.settingItem}>
+                <View style={styles.settingInfo}>
+                  <Ionicons name="time-outline" size={22} color="#6B7280" />
+                  <Text style={styles.settingText}>알림 시간</Text>
+                </View>
+                <Text style={styles.settingValue}>
+                  {user?.settings?.daily_reminder_time || '09:00'}
+                </Text>
+              </View>
+            )}
+          </View>
+        </View>
 
         {/* Menu Items */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>설정</Text>
+          <Text style={styles.sectionTitle}>기타</Text>
           <View style={styles.menuCard}>
-            <TouchableOpacity style={styles.menuItem}>
-              <View style={styles.menuIconContainer}>
-                <Ionicons name="notifications-outline" size={22} color="#6B7280" />
-              </View>
-              <Text style={styles.menuText}>알림 설정</Text>
-              <Ionicons name="chevron-forward" size={20} color="#D1D5DB" />
-            </TouchableOpacity>
-
-            <TouchableOpacity style={styles.menuItem}>
-              <View style={styles.menuIconContainer}>
-                <Ionicons name="settings-outline" size={22} color="#6B7280" />
-              </View>
-              <Text style={styles.menuText}>학습 설정</Text>
-              <Ionicons name="chevron-forward" size={20} color="#D1D5DB" />
-            </TouchableOpacity>
-
             <TouchableOpacity style={styles.menuItem}>
               <View style={styles.menuIconContainer}>
                 <Ionicons name="help-circle-outline" size={22} color="#6B7280" />
@@ -134,6 +274,14 @@ export default function MyPageScreen() {
                 <Ionicons name="document-text-outline" size={22} color="#6B7280" />
               </View>
               <Text style={styles.menuText}>이용약관</Text>
+              <Ionicons name="chevron-forward" size={20} color="#D1D5DB" />
+            </TouchableOpacity>
+
+            <TouchableOpacity style={styles.menuItem}>
+              <View style={styles.menuIconContainer}>
+                <Ionicons name="shield-checkmark-outline" size={22} color="#6B7280" />
+              </View>
+              <Text style={styles.menuText}>개인정보 처리방침</Text>
               <Ionicons name="chevron-forward" size={20} color="#D1D5DB" />
             </TouchableOpacity>
 
@@ -164,6 +312,8 @@ const styles = StyleSheet.create({
   headerTitle: { fontSize: 20, fontWeight: 'bold', color: '#111827' },
   scrollView: { flex: 1 },
   scrollContent: { paddingHorizontal: 24, paddingTop: 16, paddingBottom: 100 },
+
+  // Profile Card
   profileCard: {
     backgroundColor: '#fff',
     borderRadius: 16,
@@ -185,12 +335,17 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  avatarImage: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+  },
   avatarText: { fontSize: 32, fontWeight: 'bold', color: '#fff' },
   levelBadge: {
     position: 'absolute',
     bottom: -4,
     right: -4,
-    backgroundColor: '#EAB308',
+    backgroundColor: '#2563EB',
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 8,
@@ -198,23 +353,63 @@ const styles = StyleSheet.create({
     borderColor: '#fff',
   },
   levelBadgeText: { fontSize: 11, fontWeight: 'bold', color: '#fff' },
-  userName: { fontSize: 22, fontWeight: 'bold', color: '#111827', marginBottom: 16 },
-  statsRow: { flexDirection: 'row', alignItems: 'center', gap: 24 },
+  userName: { fontSize: 22, fontWeight: 'bold', color: '#111827', marginBottom: 4 },
+  userEmail: { fontSize: 14, color: '#6B7280', marginBottom: 16 },
+  statsRow: { flexDirection: 'row', alignItems: 'center', gap: 16, marginTop: 8 },
   statItem: { alignItems: 'center', gap: 4 },
   statValue: { fontSize: 18, fontWeight: 'bold', color: '#111827' },
   statLabel: { fontSize: 12, color: '#6B7280' },
   statDivider: { width: 1, height: 40, backgroundColor: '#E5E7EB' },
+
+  // Section
   section: { marginBottom: 24 },
-  sectionTitle: { fontSize: 14, fontWeight: '600', color: '#6B7280', marginBottom: 12 },
-  infoCard: { backgroundColor: '#fff', borderRadius: 12, padding: 16, gap: 16 },
-  infoRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  sectionHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  sectionTitle: { fontSize: 14, fontWeight: '600', color: '#6B7280' },
+  editButton: { fontSize: 14, fontWeight: '600', color: '#2563EB' },
+
+  // Info Card
+  infoCard: { backgroundColor: '#fff', borderRadius: 12, padding: 16 },
+  infoRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
   infoLabel: { fontSize: 14, color: '#6B7280' },
-  infoValue: { fontSize: 14, fontWeight: '600', color: '#111827' },
+  infoDivider: { height: 1, backgroundColor: '#F3F4F6', marginVertical: 16 },
+  levelTag: {
+    backgroundColor: '#DBEAFE',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 8,
+  },
+  levelTagText: { fontSize: 14, fontWeight: 'bold', color: '#2563EB' },
   subCategoriesContainer: { gap: 8 },
-  tagsContainer: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 4 },
-  tag: { backgroundColor: '#F3F4F6', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 6 },
-  tagText: { fontSize: 12, color: '#4B5563' },
+  tagsContainer: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 8 },
+  tag: { backgroundColor: '#F3F4F6', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8 },
+  tagText: { fontSize: 13, color: '#4B5563', fontWeight: '500' },
+  emptyText: { fontSize: 14, color: '#9CA3AF', fontStyle: 'italic' },
+
+  // Settings
   menuCard: { backgroundColor: '#fff', borderRadius: 12, overflow: 'hidden' },
+  settingItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F3F4F6',
+  },
+  settingInfo: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  settingText: { fontSize: 15, color: '#111827' },
+  settingValue: { fontSize: 14, color: '#6B7280' },
+
+  // Menu
   menuItem: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -227,5 +422,7 @@ const styles = StyleSheet.create({
   menuIconContainer: { width: 32, alignItems: 'center' },
   menuText: { flex: 1, fontSize: 15, color: '#111827', marginLeft: 8 },
   logoutText: { color: '#DC2626' },
+
+  // Version
   versionText: { fontSize: 12, color: '#9CA3AF', textAlign: 'center', marginTop: 8 },
 });

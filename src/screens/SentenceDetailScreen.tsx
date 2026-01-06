@@ -4,10 +4,10 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import * as Speech from 'expo-speech';
-import { useAppStore } from '../store/useAppStore';
+import { useAppStore, Sentence, LearningProgress } from '../store/useAppStore';
 
 type RouteParams = {
-  SentenceDetail: { id: string | number };
+  SentenceDetail: { id: number };
 };
 
 export default function SentenceDetailScreen() {
@@ -15,18 +15,31 @@ export default function SentenceDetailScreen() {
   const route = useRoute<RouteProp<RouteParams, 'SentenceDetail'>>();
   const { id } = route.params;
 
-  const todaySentences = useAppStore((state) => state.todaySentences);
-  const sentenceProgress = useAppStore((state) => state.sentenceProgress);
-  const updateStepStatus = useAppStore((state) => state.updateStepStatus);
-  const markSentenceAsMemorized = useAppStore((state) => state.markSentenceAsMemorized);
+  // Store state
+  const dailySet = useAppStore((state) => state.dailySet);
+  const localProgress = useAppStore((state) => state.localProgress);
 
-  const sentence = todaySentences.find((s) => s.id === id);
-  const progress = sentenceProgress[id] || { status: 'not_started', steps: { understand: false, speak: false, check: false } };
+  // Store actions
+  const updateLearningProgress = useAppStore((state) => state.updateLearningProgress);
+  const submitQuiz = useAppStore((state) => state.submitQuiz);
+
+  // Find sentence from dailySet
+  const sentence = dailySet?.sentences.find((s) => s.id === id);
+  const progress = localProgress[id] || {
+    sentence_id: id,
+    understand: false,
+    speak: false,
+    confirm: false,
+    memorized: false,
+    quiz_completed: false,
+  };
 
   const [isPlaying, setIsPlaying] = useState(false);
   const [showQuiz, setShowQuiz] = useState(false);
-  const [selectedAnswer, setSelectedAnswer] = useState<string | null>(null);
+  const [selectedFillBlankAnswer, setSelectedFillBlankAnswer] = useState<string | null>(null);
+  const [selectedOrderingAnswer, setSelectedOrderingAnswer] = useState<number[] | null>(null);
   const [isAnswerCorrect, setIsAnswerCorrect] = useState<boolean | null>(null);
+  const [orderingFragments, setOrderingFragments] = useState<{ text: string; originalIndex: number }[]>([]);
 
   if (!sentence) {
     return (
@@ -49,7 +62,7 @@ export default function SentenceDetailScreen() {
     }
 
     setIsPlaying(true);
-    Speech.speak(sentence.japanese, {
+    Speech.speak(sentence.jp, {
       language: 'ja-JP',
       rate: 0.9,
       onDone: () => setIsPlaying(false),
@@ -57,26 +70,82 @@ export default function SentenceDetailScreen() {
     });
   };
 
-  const handleStepComplete = (step: 'understand' | 'speak' | 'check') => {
-    updateStepStatus(id, step, true);
-  };
+  const handleStepComplete = async (step: 'understand' | 'speak' | 'confirm') => {
+    await updateLearningProgress(id, { [step]: true });
 
-  const handleQuizAnswer = (answer: string) => {
-    setSelectedAnswer(answer);
-    const isCorrect = answer === sentence.quiz?.fill_blank?.answer;
-    setIsAnswerCorrect(isCorrect);
+    // Check if all steps are complete for memorization
+    const newProgress = {
+      ...progress,
+      [step]: true,
+    };
 
-    if (isCorrect) {
-      handleStepComplete('check');
-      // Check if all steps are complete
-      const newSteps = { ...progress.steps, check: true };
-      if (newSteps.understand && newSteps.speak && newSteps.check) {
-        markSentenceAsMemorized(id);
-      }
+    if (newProgress.understand && newProgress.speak && newProgress.confirm && newProgress.quiz_completed) {
+      await updateLearningProgress(id, { memorized: true });
     }
   };
 
-  const allStepsComplete = progress.steps.understand && progress.steps.speak && progress.steps.check;
+  const handleShowQuiz = () => {
+    setShowQuiz(true);
+    // Initialize ordering fragments if ordering quiz exists
+    if (sentence.quiz?.ordering) {
+      const shuffled = sentence.quiz.ordering.fragments
+        .map((text, index) => ({ text, originalIndex: index }))
+        .sort(() => Math.random() - 0.5);
+      setOrderingFragments(shuffled);
+    }
+  };
+
+  const handleFillBlankAnswer = async (answer: string) => {
+    setSelectedFillBlankAnswer(answer);
+    const isCorrect = await submitQuiz(id, answer);
+    setIsAnswerCorrect(isCorrect);
+
+    if (isCorrect) {
+      await handleStepComplete('confirm');
+      await updateLearningProgress(id, { quiz_completed: true });
+    }
+  };
+
+  const handleOrderingSubmit = async () => {
+    if (!selectedOrderingAnswer) return;
+
+    const isCorrect = await submitQuiz(id, undefined, selectedOrderingAnswer);
+    setIsAnswerCorrect(isCorrect);
+
+    if (isCorrect) {
+      await handleStepComplete('confirm');
+      await updateLearningProgress(id, { quiz_completed: true });
+    }
+  };
+
+  const handleOrderingSelect = (fragmentIndex: number) => {
+    const newOrder = selectedOrderingAnswer ? [...selectedOrderingAnswer] : [];
+    const fragment = orderingFragments[fragmentIndex];
+
+    if (newOrder.includes(fragment.originalIndex)) {
+      // Remove from selection
+      const idx = newOrder.indexOf(fragment.originalIndex);
+      newOrder.splice(idx, 1);
+    } else {
+      // Add to selection
+      newOrder.push(fragment.originalIndex);
+    }
+
+    setSelectedOrderingAnswer(newOrder);
+  };
+
+  const getCategoryLabel = (category: string) => {
+    const labels: Record<string, string> = {
+      anime: '애니',
+      game: '게임',
+      music: '음악',
+      movie: '영화',
+      drama: '드라마',
+    };
+    return labels[category] || category;
+  };
+
+  const allStepsComplete = progress.understand && progress.speak && progress.confirm && progress.quiz_completed;
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
@@ -92,11 +161,11 @@ export default function SentenceDetailScreen() {
       <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent}>
         {/* Main Sentence Card */}
         <View style={styles.mainCard}>
-          <Text style={styles.japaneseText}>{sentence.japanese}</Text>
-          {sentence.reading && (
-            <Text style={styles.readingText}>{sentence.reading}</Text>
+          <Text style={styles.japaneseText}>{sentence.jp}</Text>
+          {sentence.romaji && (
+            <Text style={styles.romajiText}>{sentence.romaji}</Text>
           )}
-          <Text style={styles.meaningText}>{sentence.meaning}</Text>
+          <Text style={styles.meaningText}>{sentence.kr}</Text>
 
           <TouchableOpacity
             style={[styles.playButton, isPlaying && styles.playButtonActive]}
@@ -108,31 +177,30 @@ export default function SentenceDetailScreen() {
             </Text>
           </TouchableOpacity>
 
-          {sentence.tags && sentence.tags.length > 0 && (
-            <View style={styles.tagsContainer}>
-              {sentence.tags.map((tag, idx) => (
-                <View key={idx} style={styles.tag}>
-                  <Text style={styles.tagText}>{tag}</Text>
-                </View>
-              ))}
+          <View style={styles.tagsContainer}>
+            <View style={styles.levelTag}>
+              <Text style={styles.levelTagText}>{sentence.level}</Text>
             </View>
-          )}
+            <View style={styles.categoryTag}>
+              <Text style={styles.categoryTagText}>{getCategoryLabel(sentence.category)}</Text>
+            </View>
+          </View>
         </View>
 
         {/* Words Section */}
-        {sentence.words && sentence.words.length > 0 && (
+        {sentence.detail?.words && sentence.detail.words.length > 0 && (
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>단어</Text>
             <View style={styles.wordsList}>
-              {sentence.words.map((word, idx) => (
+              {sentence.detail.words.map((word, idx) => (
                 <View key={idx} style={styles.wordCard}>
                   <View style={styles.wordHeader}>
                     <Text style={styles.wordJapanese}>{word.japanese}</Text>
                     <Text style={styles.wordReading}>{word.reading}</Text>
                   </View>
                   <Text style={styles.wordMeaning}>{word.meaning}</Text>
-                  {word.part_of && (
-                    <Text style={styles.wordPartOf}>{word.part_of}</Text>
+                  {word.part_of_speech && (
+                    <Text style={styles.wordPartOf}>{word.part_of_speech}</Text>
                   )}
                 </View>
               ))}
@@ -141,16 +209,22 @@ export default function SentenceDetailScreen() {
         )}
 
         {/* Grammar Section */}
-        {sentence.grammar && sentence.grammar.length > 0 && (
+        {sentence.detail?.grammar && (
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>문법</Text>
-            <View style={styles.grammarList}>
-              {sentence.grammar.map((item, idx) => (
-                <View key={idx} style={styles.grammarItem}>
-                  <Ionicons name="book-outline" size={16} color="#6B7280" />
-                  <Text style={styles.grammarText}>{item}</Text>
-                </View>
-              ))}
+            <View style={styles.grammarCard}>
+              <Ionicons name="book-outline" size={16} color="#6B7280" />
+              <Text style={styles.grammarText}>{sentence.detail.grammar}</Text>
+            </View>
+          </View>
+        )}
+
+        {/* Examples Section */}
+        {sentence.detail?.examples && (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>예문</Text>
+            <View style={styles.examplesCard}>
+              <Text style={styles.examplesText}>{sentence.detail.examples}</Text>
             </View>
           </View>
         )}
@@ -160,11 +234,11 @@ export default function SentenceDetailScreen() {
           <Text style={styles.sectionTitle}>학습 단계</Text>
           <View style={styles.stepsList}>
             <TouchableOpacity
-              style={[styles.stepCard, progress.steps.understand && styles.stepCardComplete]}
+              style={[styles.stepCard, progress.understand && styles.stepCardComplete]}
               onPress={() => handleStepComplete('understand')}
             >
-              <View style={[styles.stepIcon, progress.steps.understand && styles.stepIconComplete]}>
-                {progress.steps.understand ? (
+              <View style={[styles.stepIcon, progress.understand && styles.stepIconComplete]}>
+                {progress.understand ? (
                   <Ionicons name="checkmark" size={20} color="#fff" />
                 ) : (
                   <Text style={styles.stepNumber}>1</Text>
@@ -177,14 +251,14 @@ export default function SentenceDetailScreen() {
             </TouchableOpacity>
 
             <TouchableOpacity
-              style={[styles.stepCard, progress.steps.speak && styles.stepCardComplete]}
+              style={[styles.stepCard, progress.speak && styles.stepCardComplete]}
               onPress={() => {
                 handlePlay();
                 handleStepComplete('speak');
               }}
             >
-              <View style={[styles.stepIcon, progress.steps.speak && styles.stepIconComplete]}>
-                {progress.steps.speak ? (
+              <View style={[styles.stepIcon, progress.speak && styles.stepIconComplete]}>
+                {progress.speak ? (
                   <Ionicons name="checkmark" size={20} color="#fff" />
                 ) : (
                   <Text style={styles.stepNumber}>2</Text>
@@ -197,11 +271,11 @@ export default function SentenceDetailScreen() {
             </TouchableOpacity>
 
             <TouchableOpacity
-              style={[styles.stepCard, progress.steps.check && styles.stepCardComplete]}
-              onPress={() => setShowQuiz(true)}
+              style={[styles.stepCard, progress.confirm && styles.stepCardComplete]}
+              onPress={handleShowQuiz}
             >
-              <View style={[styles.stepIcon, progress.steps.check && styles.stepIconComplete]}>
-                {progress.steps.check ? (
+              <View style={[styles.stepIcon, progress.confirm && styles.stepIconComplete]}>
+                {progress.confirm ? (
                   <Ionicons name="checkmark" size={20} color="#fff" />
                 ) : (
                   <Text style={styles.stepNumber}>3</Text>
@@ -215,10 +289,10 @@ export default function SentenceDetailScreen() {
           </View>
         </View>
 
-        {/* Quiz Section */}
+        {/* Fill Blank Quiz */}
         {showQuiz && sentence.quiz?.fill_blank && (
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>퀴즈</Text>
+            <Text style={styles.sectionTitle}>빈칸 채우기</Text>
             <View style={styles.quizCard}>
               <Text style={styles.quizQuestion}>{sentence.quiz.fill_blank.question_jp}</Text>
               <View style={styles.quizOptions}>
@@ -227,23 +301,91 @@ export default function SentenceDetailScreen() {
                     key={idx}
                     style={[
                       styles.quizOption,
-                      selectedAnswer === option && styles.quizOptionSelected,
-                      selectedAnswer === option && isAnswerCorrect === true && styles.quizOptionCorrect,
-                      selectedAnswer === option && isAnswerCorrect === false && styles.quizOptionWrong,
+                      selectedFillBlankAnswer === option && styles.quizOptionSelected,
+                      selectedFillBlankAnswer === option && isAnswerCorrect === true && styles.quizOptionCorrect,
+                      selectedFillBlankAnswer === option && isAnswerCorrect === false && styles.quizOptionWrong,
                     ]}
-                    onPress={() => handleQuizAnswer(option)}
-                    disabled={selectedAnswer !== null}
+                    onPress={() => handleFillBlankAnswer(option)}
+                    disabled={selectedFillBlankAnswer !== null}
                   >
                     <Text style={[
                       styles.quizOptionText,
-                      selectedAnswer === option && styles.quizOptionTextSelected,
+                      selectedFillBlankAnswer === option && styles.quizOptionTextSelected,
                     ]}>
                       {option}
                     </Text>
                   </TouchableOpacity>
                 ))}
               </View>
-              {isAnswerCorrect !== null && (
+              {isAnswerCorrect !== null && selectedFillBlankAnswer && (
+                <View style={[styles.quizResult, isAnswerCorrect ? styles.quizResultCorrect : styles.quizResultWrong]}>
+                  <Ionicons
+                    name={isAnswerCorrect ? 'checkmark-circle' : 'close-circle'}
+                    size={20}
+                    color={isAnswerCorrect ? '#16A34A' : '#DC2626'}
+                  />
+                  <Text style={[styles.quizResultText, isAnswerCorrect ? styles.quizResultTextCorrect : styles.quizResultTextWrong]}>
+                    {isAnswerCorrect ? '정답입니다!' : '다시 시도해보세요'}
+                  </Text>
+                </View>
+              )}
+            </View>
+          </View>
+        )}
+
+        {/* Ordering Quiz */}
+        {showQuiz && sentence.quiz?.ordering && (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>문장 배열하기</Text>
+            <View style={styles.quizCard}>
+              <Text style={styles.quizInstruction}>올바른 순서로 선택하세요</Text>
+
+              {/* Selected order display */}
+              {selectedOrderingAnswer && selectedOrderingAnswer.length > 0 && (
+                <View style={styles.selectedOrder}>
+                  {selectedOrderingAnswer.map((origIdx, idx) => (
+                    <View key={idx} style={styles.selectedOrderItem}>
+                      <Text style={styles.selectedOrderText}>
+                        {sentence.quiz!.ordering!.fragments[origIdx]}
+                      </Text>
+                    </View>
+                  ))}
+                </View>
+              )}
+
+              {/* Fragment options */}
+              <View style={styles.orderingOptions}>
+                {orderingFragments.map((fragment, idx) => {
+                  const isSelected = selectedOrderingAnswer?.includes(fragment.originalIndex);
+                  return (
+                    <TouchableOpacity
+                      key={idx}
+                      style={[
+                        styles.orderingOption,
+                        isSelected && styles.orderingOptionSelected,
+                      ]}
+                      onPress={() => handleOrderingSelect(idx)}
+                      disabled={isAnswerCorrect !== null}
+                    >
+                      <Text style={[
+                        styles.orderingOptionText,
+                        isSelected && styles.orderingOptionTextSelected,
+                      ]}>
+                        {fragment.text}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+
+              {/* Submit button */}
+              {selectedOrderingAnswer && selectedOrderingAnswer.length === orderingFragments.length && isAnswerCorrect === null && (
+                <TouchableOpacity style={styles.submitButton} onPress={handleOrderingSubmit}>
+                  <Text style={styles.submitButtonText}>정답 확인</Text>
+                </TouchableOpacity>
+              )}
+
+              {isAnswerCorrect !== null && !selectedFillBlankAnswer && (
                 <View style={[styles.quizResult, isAnswerCorrect ? styles.quizResultCorrect : styles.quizResultWrong]}>
                   <Ionicons
                     name={isAnswerCorrect ? 'checkmark-circle' : 'close-circle'}
@@ -291,6 +433,8 @@ const styles = StyleSheet.create({
   errorContainer: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   errorText: { fontSize: 16, color: '#6B7280', marginBottom: 16 },
   backLink: { fontSize: 16, color: '#2563EB', fontWeight: '600' },
+
+  // Main Card
   mainCard: {
     backgroundColor: '#fff',
     borderRadius: 16,
@@ -303,7 +447,7 @@ const styles = StyleSheet.create({
     elevation: 2,
   },
   japaneseText: { fontSize: 28, fontWeight: 'bold', color: '#111827', marginBottom: 8, textAlign: 'center' },
-  readingText: { fontSize: 16, color: '#6B7280', marginBottom: 8, textAlign: 'center' },
+  romajiText: { fontSize: 14, color: '#9CA3AF', marginBottom: 8, textAlign: 'center' },
   meaningText: { fontSize: 18, color: '#374151', marginBottom: 20, textAlign: 'center' },
   playButton: {
     flexDirection: 'row',
@@ -319,10 +463,26 @@ const styles = StyleSheet.create({
   playButtonText: { fontSize: 16, fontWeight: '600', color: '#2563EB' },
   playButtonTextActive: { color: '#fff' },
   tagsContainer: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 8 },
-  tag: { backgroundColor: '#F3F4F6', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8 },
-  tagText: { fontSize: 12, color: '#6B7280', fontWeight: '500' },
+  levelTag: {
+    backgroundColor: '#DBEAFE',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 8,
+  },
+  levelTagText: { fontSize: 12, color: '#2563EB', fontWeight: '600' },
+  categoryTag: {
+    backgroundColor: '#F3F4F6',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 8,
+  },
+  categoryTagText: { fontSize: 12, color: '#6B7280', fontWeight: '500' },
+
+  // Sections
   section: { marginBottom: 24 },
   sectionTitle: { fontSize: 18, fontWeight: 'bold', color: '#111827', marginBottom: 12 },
+
+  // Words
   wordsList: { gap: 12 },
   wordCard: { backgroundColor: '#fff', borderRadius: 12, padding: 16 },
   wordHeader: { flexDirection: 'row', alignItems: 'baseline', gap: 8, marginBottom: 4 },
@@ -330,9 +490,27 @@ const styles = StyleSheet.create({
   wordReading: { fontSize: 14, color: '#6B7280' },
   wordMeaning: { fontSize: 15, color: '#374151' },
   wordPartOf: { fontSize: 12, color: '#9CA3AF', marginTop: 4 },
-  grammarList: { backgroundColor: '#fff', borderRadius: 12, padding: 16, gap: 12 },
-  grammarItem: { flexDirection: 'row', gap: 8, alignItems: 'flex-start' },
+
+  // Grammar
+  grammarCard: {
+    flexDirection: 'row',
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    padding: 16,
+    gap: 8,
+    alignItems: 'flex-start',
+  },
   grammarText: { fontSize: 14, color: '#374151', flex: 1 },
+
+  // Examples
+  examplesCard: {
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    padding: 16,
+  },
+  examplesText: { fontSize: 14, color: '#374151', lineHeight: 22 },
+
+  // Steps
   stepsList: { gap: 12 },
   stepCard: {
     flexDirection: 'row',
@@ -358,8 +536,11 @@ const styles = StyleSheet.create({
   stepContent: { flex: 1 },
   stepTitle: { fontSize: 16, fontWeight: 'bold', color: '#111827', marginBottom: 2 },
   stepDesc: { fontSize: 13, color: '#6B7280' },
+
+  // Quiz
   quizCard: { backgroundColor: '#fff', borderRadius: 12, padding: 20 },
   quizQuestion: { fontSize: 18, fontWeight: '600', color: '#111827', marginBottom: 16, textAlign: 'center' },
+  quizInstruction: { fontSize: 14, color: '#6B7280', marginBottom: 16, textAlign: 'center' },
   quizOptions: { gap: 12 },
   quizOption: {
     borderWidth: 2,
@@ -387,6 +568,47 @@ const styles = StyleSheet.create({
   quizResultText: { fontSize: 14, fontWeight: '600' },
   quizResultTextCorrect: { color: '#16A34A' },
   quizResultTextWrong: { color: '#DC2626' },
+
+  // Ordering Quiz
+  selectedOrder: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginBottom: 16,
+    padding: 12,
+    backgroundColor: '#F9FAFB',
+    borderRadius: 8,
+    minHeight: 48,
+  },
+  selectedOrderItem: {
+    backgroundColor: '#2563EB',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 6,
+  },
+  selectedOrderText: { color: '#fff', fontSize: 14, fontWeight: '500' },
+  orderingOptions: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  orderingOption: {
+    borderWidth: 2,
+    borderColor: '#E5E7EB',
+    borderRadius: 8,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+  },
+  orderingOptionSelected: { borderColor: '#2563EB', backgroundColor: '#EFF6FF' },
+  orderingOptionText: { fontSize: 14, fontWeight: '500', color: '#374151' },
+  orderingOptionTextSelected: { color: '#1D4ED8' },
+  submitButton: {
+    backgroundColor: '#2563EB',
+    borderRadius: 12,
+    height: 48,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 16,
+  },
+  submitButtonText: { fontSize: 16, fontWeight: 'bold', color: '#fff' },
+
+  // Completion
   completionBadge: {
     alignItems: 'center',
     backgroundColor: '#FEF9C3',

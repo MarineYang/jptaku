@@ -1,14 +1,65 @@
-import React from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, Image } from 'react-native';
+import React, { useState } from 'react';
+import { View, Text, TouchableOpacity, StyleSheet, Image, ActivityIndicator, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import * as WebBrowser from 'expo-web-browser';
+import * as Linking from 'expo-linking';
+import { useAppStore } from '../store/useAppStore';
 
 const API_URL = process.env.EXPO_PUBLIC_API_URL || 'https://api.example.com';
 
+// Warm up browser for faster loading
+WebBrowser.maybeCompleteAuthSession();
+
 export default function LoginScreen() {
+  const [isLoading, setIsLoading] = useState(false);
+  const setAuth = useAppStore((state) => state.setAuth);
+
   const handleGoogleLogin = async () => {
-    const oauthUrl = `${API_URL}/api/auth/google?state=mobile`;
-    await WebBrowser.openAuthSessionAsync(oauthUrl, 'jptaku://auth/callback');
+    try {
+      setIsLoading(true);
+
+      // 1. Get OAuth URL from backend
+      const response = await fetch(`${API_URL}/api/auth/google?state=mobile`);
+      const result = await response.json();
+
+      if (!result.success || !result.data?.url) {
+        throw new Error('Failed to get OAuth URL');
+      }
+
+      const oauthUrl = result.data.url;
+
+      // 2. Create redirect URI for the app
+      const redirectUri = Linking.createURL('auth/callback');
+
+      // 3. Open browser for Google OAuth
+      const authResult = await WebBrowser.openAuthSessionAsync(oauthUrl, redirectUri);
+
+      if (authResult.type === 'success' && authResult.url) {
+        // 4. Parse the callback URL to get the token
+        const url = new URL(authResult.url);
+        const accessToken = url.searchParams.get('access_token');
+
+        if (accessToken) {
+          setAuth(accessToken);
+        } else {
+          // Check if token is in hash fragment (some OAuth flows use this)
+          const hashParams = new URLSearchParams(url.hash.substring(1));
+          const hashToken = hashParams.get('access_token');
+          if (hashToken) {
+            setAuth(hashToken);
+          } else {
+            Alert.alert('로그인 실패', '인증 토큰을 받지 못했습니다.');
+          }
+        }
+      } else if (authResult.type === 'cancel') {
+        // User cancelled, do nothing
+      }
+    } catch (error) {
+      console.error('Google login error:', error);
+      Alert.alert('로그인 오류', '로그인 중 문제가 발생했습니다. 다시 시도해주세요.');
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -25,12 +76,22 @@ export default function LoginScreen() {
 
         {/* Login Button */}
         <View style={styles.buttonSection}>
-          <TouchableOpacity style={styles.googleButton} onPress={handleGoogleLogin}>
-            <Image
-              source={{ uri: 'https://www.google.com/favicon.ico' }}
-              style={styles.googleIcon}
-            />
-            <Text style={styles.googleButtonText}>Google Login</Text>
+          <TouchableOpacity
+            style={[styles.googleButton, isLoading && styles.googleButtonDisabled]}
+            onPress={handleGoogleLogin}
+            disabled={isLoading}
+          >
+            {isLoading ? (
+              <ActivityIndicator size="small" color="#2563EB" />
+            ) : (
+              <>
+                <Image
+                  source={{ uri: 'https://www.google.com/favicon.ico' }}
+                  style={styles.googleIcon}
+                />
+                <Text style={styles.googleButtonText}>Google로 로그인</Text>
+              </>
+            )}
           </TouchableOpacity>
           <Text style={styles.terms}>로그인 시 서비스 이용약관에 동의하게 됩니다.</Text>
         </View>
@@ -103,6 +164,9 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.05,
     shadowRadius: 2,
     elevation: 1,
+  },
+  googleButtonDisabled: {
+    opacity: 0.7,
   },
   googleIcon: {
     width: 20,

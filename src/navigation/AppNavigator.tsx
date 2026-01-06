@@ -19,18 +19,24 @@ export type RootStackParamList = {
   Login: undefined;
   Onboarding: undefined;
   Main: undefined;
-  SentenceDetail: { id: string | number };
+  SentenceDetail: { id: number };
   Conversation: undefined;
+  Feedback: { sessionId: number };
 };
 
 export type TabParamList = {
   Home: undefined;
-  Feedback: undefined;
+  Stats: undefined;
   MyPage: undefined;
 };
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 const Tab = createBottomTabNavigator<TabParamList>();
+
+// Stats placeholder screen (shows general learning stats, not session feedback)
+function StatsScreen() {
+  return <FeedbackScreen />;
+}
 
 function TabNavigator() {
   return (
@@ -57,7 +63,7 @@ function TabNavigator() {
 
           if (route.name === 'Home') {
             iconName = focused ? 'home' : 'home-outline';
-          } else if (route.name === 'Feedback') {
+          } else if (route.name === 'Stats') {
             iconName = focused ? 'analytics' : 'analytics-outline';
           } else if (route.name === 'MyPage') {
             iconName = focused ? 'person' : 'person-outline';
@@ -68,7 +74,7 @@ function TabNavigator() {
       })}
     >
       <Tab.Screen name="Home" component={HomeScreen} options={{ tabBarLabel: '홈' }} />
-      <Tab.Screen name="Feedback" component={FeedbackScreen} options={{ tabBarLabel: '피드백' }} />
+      <Tab.Screen name="Stats" component={StatsScreen} options={{ tabBarLabel: '통계' }} />
       <Tab.Screen name="MyPage" component={MyPageScreen} options={{ tabBarLabel: '마이' }} />
     </Tab.Navigator>
   );
@@ -83,6 +89,7 @@ const linking = {
       Main: '',
       SentenceDetail: 'sentence/:id',
       Conversation: 'chat',
+      Feedback: 'feedback/:sessionId',
     },
   },
 };
@@ -146,6 +153,11 @@ export default function AppNavigator() {
           name="Conversation"
           component={ConversationScreen}
           options={{ animation: 'slide_from_bottom' }}
+        />
+        <Stack.Screen
+          name="Feedback"
+          component={FeedbackScreen}
+          options={{ animation: 'slide_from_right' }}
         />
       </Stack.Navigator>
     </NavigationContainer>
