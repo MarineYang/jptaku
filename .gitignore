@@ -1,51 +1,67 @@
-# Dependencies
-node_modules/
+# Flutter
+.dart_tool/
+.packages
+build/
+*.iml
 
-# Expo
-.expo/
-dist/
-web-build/
+# Dependency directories
+.pub-cache/
+.pub/
 
-# Native builds
-ios/
-android/
-*.jks
-*.p8
-*.p12
-*.key
-*.mobileprovision
-*.orig.*
+# Generated files
+*.g.dart
+*.freezed.dart
+*.gr.dart
+lib/generated/
 
-# Metro
-.metro-health-check*
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
 
-# Debug
-npm-debug.*
-yarn-debug.*
-yarn-error.*
-
-# Environment variables
-.env
-.env.local
-.env.*.local
+.claude
+.metadata
+android
 
 # macOS
 .DS_Store
 *.pem
 
-# Local History for VSCode
-.history/
+# Android
+android/.gradle/
+android/app/debug/
+android/app/profile/
+android/app/release/
+android/local.properties
+*.jks
+*.keystore
 
-# Editor
-.vscode/
-.idea/
-*.sw?
+# iOS
+ios/Pods/
+ios/.symlinks/
+ios/Flutter/Flutter.framework
+ios/Flutter/Flutter.podspec
+ios/Runner/GeneratedPluginRegistrant.*
 
-# Testing
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Logs
+*.log
+
+# Coverage
 coverage/
 
-# Turborepo
-.turbo/
+# Testing
+.test_runner/
 
 # Misc
-*.log
+*.orig.*
+
+# Windows special files
+nul
+android/nul
