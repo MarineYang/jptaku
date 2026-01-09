@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 // ==================== Word ====================
 class Word {
   final String japanese;
@@ -252,36 +254,86 @@ class LearningProgress {
 // ==================== Flash ====================
 class FlashSentence {
   final int id;
+  final String? sentenceKey;
   final String jp;
   final String kr;
   final String? romaji;
+  final int level;
+  final int category;
   final String? phrase;
   final String? tip;
   final String? alt;
   final String? audioUrl;
+  final int flashCount;
+  final String? flashGrade;
+  final DateTime? nextReviewAt;
 
   FlashSentence({
     required this.id,
+    this.sentenceKey,
     required this.jp,
     required this.kr,
     this.romaji,
+    this.level = 5,
+    this.category = 1,
     this.phrase,
     this.tip,
     this.alt,
     this.audioUrl,
+    this.flashCount = 0,
+    this.flashGrade,
+    this.nextReviewAt,
   });
 
   factory FlashSentence.fromJson(Map<String, dynamic> json) {
     return FlashSentence(
       id: json['id'] ?? 0,
+      sentenceKey: json['sentence_key'],
       jp: json['jp'] ?? '',
       kr: json['kr'] ?? '',
       romaji: json['romaji'],
+      level: json['level'] ?? 5,
+      category: json['category'] ?? 1,
       phrase: json['phrase'],
       tip: json['tip'],
       alt: json['alt'],
       audioUrl: json['audio_url'],
+      flashCount: json['flash_count'] ?? 0,
+      flashGrade: json['flash_grade'],
+      nextReviewAt: json['next_review_at'] != null
+          ? DateTime.parse(json['next_review_at'])
+          : null,
     );
+  }
+
+  String get levelName {
+    switch (level) {
+      case 3:
+        return 'N3';
+      case 4:
+        return 'N4';
+      case 5:
+        return 'N5';
+      default:
+        return 'N$level';
+    }
+  }
+
+  String get categoryName {
+    switch (category) {
+      case 1:
+        return '애니메이션';
+      case 2:
+        return '게임';
+      case 3:
+        return '음악';
+      case 4:
+        return '영화';
+      case 5:
+        return '드라마';
+      default:
+        return '기타';
+    }
   }
 }
 
@@ -371,6 +423,146 @@ class ChatSession {
   }
 
   bool get isActive => status == 'active';
+}
+
+class ChatSuggestion {
+  final String text;
+  final String? textKr;
+
+  ChatSuggestion({
+    required this.text,
+    this.textKr,
+  });
+
+  factory ChatSuggestion.fromJson(Map<String, dynamic> json) {
+    return ChatSuggestion(
+      text: json['text'] ?? '',
+      textKr: json['text_kr'],
+    );
+  }
+}
+
+class CreateSessionResponse {
+  final ChatSession session;
+  final String? greeting;
+  final String? greetingKr;
+  final List<ChatSuggestion> suggestions;
+  final String? audio;
+
+  CreateSessionResponse({
+    required this.session,
+    this.greeting,
+    this.greetingKr,
+    this.suggestions = const [],
+    this.audio,
+  });
+
+  factory CreateSessionResponse.fromJson(Map<String, dynamic> json) {
+    return CreateSessionResponse(
+      session: ChatSession.fromJson(json['session']),
+      greeting: json['greeting'],
+      greetingKr: json['greeting_kr'],
+      suggestions: (json['suggestions'] as List<dynamic>?)
+              ?.map((s) => ChatSuggestion.fromJson(s))
+              .toList() ??
+          [],
+      audio: json['audio'],
+    );
+  }
+}
+
+// ==================== SSE Event ====================
+enum SSEEventType {
+  content,
+  translation,
+  audio,
+  suggestions,
+  done,
+  error,
+}
+
+class SSEEvent {
+  final SSEEventType type;
+  final String? content;
+  final String? contentKr;
+  final String? audio;
+  final List<ChatSuggestion>? suggestions;
+  final int? currentTurn;
+  final int? maxTurn;
+  final bool? isCompleted;
+  final String? error;
+
+  SSEEvent({
+    required this.type,
+    this.content,
+    this.contentKr,
+    this.audio,
+    this.suggestions,
+    this.currentTurn,
+    this.maxTurn,
+    this.isCompleted,
+    this.error,
+  });
+
+  factory SSEEvent.fromJson(Map<String, dynamic> json) {
+    final typeStr = json['type'] as String? ?? '';
+    SSEEventType type;
+
+    switch (typeStr) {
+      case 'content':
+        type = SSEEventType.content;
+        break;
+      case 'translation':
+        type = SSEEventType.translation;
+        break;
+      case 'audio':
+        type = SSEEventType.audio;
+        break;
+      case 'suggestions':
+        type = SSEEventType.suggestions;
+        break;
+      case 'done':
+        type = SSEEventType.done;
+        break;
+      case 'error':
+        type = SSEEventType.error;
+        break;
+      default:
+        type = SSEEventType.content;
+    }
+
+    // done 타입인 경우 content를 파싱
+    int? currentTurn;
+    int? maxTurn;
+    bool? isCompleted;
+    if (type == SSEEventType.done && json['content'] != null) {
+      try {
+        final contentStr = json['content'] as String;
+        if (contentStr.startsWith('{')) {
+          final doneData = jsonDecode(contentStr) as Map<String, dynamic>;
+          currentTurn = doneData['current_turn'] as int?;
+          maxTurn = doneData['max_turn'] as int?;
+          isCompleted = doneData['is_completed'] as bool?;
+        }
+      } catch (_) {}
+    }
+
+    return SSEEvent(
+      type: type,
+      content: json['content'] as String?,
+      contentKr: json['content_kr'] as String?,
+      audio: json['audio'] as String?,
+      suggestions: json['suggestions'] != null
+          ? (json['suggestions'] as List<dynamic>)
+              .map((s) => ChatSuggestion.fromJson(s))
+              .toList()
+          : null,
+      currentTurn: currentTurn,
+      maxTurn: maxTurn,
+      isCompleted: isCompleted,
+      error: json['error'] as String?,
+    );
+  }
 }
 
 // ==================== Feedback ====================

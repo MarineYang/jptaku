@@ -1,17 +1,23 @@
+import 'dart:convert';
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:just_audio/just_audio.dart';
+import 'package:path_provider/path_provider.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../data/models/sentence_model.dart';
 import '../../providers/auth_provider.dart';
 
 class Message {
   final String content;
+  final String? contentKr;
   final bool isUser;
   final DateTime timestamp;
 
   Message({
     required this.content,
+    this.contentKr,
     required this.isUser,
     DateTime? timestamp,
   }) : timestamp = timestamp ?? DateTime.now();
@@ -27,59 +33,68 @@ class ConversationScreen extends ConsumerStatefulWidget {
 class _ConversationScreenState extends ConsumerState<ConversationScreen> {
   final TextEditingController _controller = TextEditingController();
   final ScrollController _scrollController = ScrollController();
+  final AudioPlayer _audioPlayer = AudioPlayer();
   final List<Message> _messages = [];
-  bool _isLoading = false;
+  bool _isLoading = true;
   bool _isStreaming = false;
   bool _isCompleted = false;
   ChatSession? _session;
   int _currentTurn = 0;
-  final int _maxTurns = 5;
+  int _maxTurns = 8;
   String _streamingText = '';
+  String? _streamingTranslation;
+  List<ChatSuggestion> _suggestions = [];
+  Set<int> _expandedMessages = {};
 
-  final List<Map<String, String>> _topicSuggestions = [
-    {'topic': 'cafe', 'label': '카페에서 주문하기'},
-    {'topic': 'shopping', 'label': '쇼핑할 때'},
-    {'topic': 'travel', 'label': '여행 중 질문'},
-    {'topic': 'greeting', 'label': '일상 인사'},
-    {'topic': 'anime', 'label': '애니메이션 이야기'},
-  ];
+  @override
+  void initState() {
+    super.initState();
+    _startConversation();
+  }
 
   @override
   void dispose() {
     _controller.dispose();
     _scrollController.dispose();
+    _audioPlayer.dispose();
     super.dispose();
   }
 
-  Future<void> _startConversation(String topic, String label) async {
-    setState(() => _isLoading = true);
-
+  Future<void> _startConversation() async {
     try {
       final apiService = ref.read(apiServiceProvider);
-      final session = await apiService.createChatSession(
-        topic: topic,
-        topicDetail: label,
+      final response = await apiService.createChatSession(
+        topic: 'general',
       );
 
-      if (session != null && mounted) {
+      if (response != null && mounted) {
         setState(() {
-          _session = session;
-          _messages.add(Message(
-            content: 'こんにちは！「$label」について話しましょう。日本語で話してみてください！',
-            isUser: false,
-          ));
+          _session = response.session;
+          _suggestions = response.suggestions;
+          // greeting 메시지 추가
+          if (response.greeting != null) {
+            _messages.add(Message(
+              content: response.greeting!,
+              contentKr: response.greetingKr,
+              isUser: false,
+            ));
+          }
           _isLoading = false;
         });
+      } else {
+        if (mounted) {
+          setState(() => _isLoading = false);
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('세션 생성에 실패했습니다.')),
+          );
+        }
       }
     } catch (e) {
       if (mounted) {
-        setState(() {
-          _messages.add(Message(
-            content: 'こんにちは！今日は何について話しましょうか？',
-            isUser: false,
-          ));
-          _isLoading = false;
-        });
+        setState(() => _isLoading = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('세션 생성에 실패했습니다.')),
+        );
       }
     }
   }
@@ -93,44 +108,97 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen> {
       _messages.add(Message(content: text, isUser: true));
       _isStreaming = true;
       _streamingText = '';
+      _streamingTranslation = null;
       _currentTurn++;
+      _suggestions = [];
     });
     _controller.clear();
     _scrollToBottom();
 
     try {
       final apiService = ref.read(apiServiceProvider);
+      debugPrint('Calling sendMessageStream: sessionId=${_session!.id}, message=$text');
       final stream = apiService.sendMessageStream(
         sessionId: _session!.id,
         message: text,
       );
 
-      await for (final chunk in stream) {
-        if (chunk == '[ERROR]') {
-          setState(() {
-            _messages.add(Message(
-              content: 'すみません、エラーが発生しました。もう一度試してください。',
-              isUser: false,
-            ));
-          });
-          break;
+      debugPrint('Stream created, waiting for events...');
+      await for (final event in stream) {
+        debugPrint('SSE Event received: ${event.type}');
+        switch (event.type) {
+          case SSEEventType.content:
+            // 일본어 텍스트 스트리밍
+            if (event.content != null) {
+              setState(() {
+                _streamingText += event.content!;
+              });
+              _scrollToBottom();
+            }
+            break;
+
+          case SSEEventType.translation:
+            // 한국어 번역
+            debugPrint('Translation: ${event.contentKr}');
+            if (event.contentKr != null) {
+              setState(() {
+                _streamingTranslation = event.contentKr;
+              });
+            }
+            break;
+
+          case SSEEventType.audio:
+            // Base64 오디오 재생
+            debugPrint('Audio received: ${event.audio?.length ?? 0} chars');
+            if (event.audio != null) {
+              _playAudio(event.audio!);
+            }
+            break;
+
+          case SSEEventType.suggestions:
+            // 답변 제안
+            if (event.suggestions != null) {
+              setState(() {
+                _suggestions = event.suggestions!;
+              });
+            }
+            break;
+
+          case SSEEventType.done:
+            // 스트리밍 완료 - 메시지 추가
+            if (_streamingText.isNotEmpty) {
+              setState(() {
+                _messages.add(Message(
+                  content: _streamingText,
+                  contentKr: _streamingTranslation,
+                  isUser: false,
+                ));
+                _streamingText = '';
+                _streamingTranslation = null;
+
+                // 턴 정보 업데이트
+                if (event.currentTurn != null) {
+                  _currentTurn = event.currentTurn!;
+                }
+                if (event.maxTurn != null) {
+                  _maxTurns = event.maxTurn!;
+                }
+                if (event.isCompleted == true) {
+                  _isCompleted = true;
+                }
+              });
+            }
+            break;
+
+          case SSEEventType.error:
+            setState(() {
+              _messages.add(Message(
+                content: 'すみません、エラーが発生しました。もう一度試してください。',
+                isUser: false,
+              ));
+            });
+            break;
         }
-
-        setState(() {
-          _streamingText += chunk;
-        });
-        _scrollToBottom();
-      }
-
-      if (_streamingText.isNotEmpty) {
-        setState(() {
-          _messages.add(Message(content: _streamingText, isUser: false));
-          _streamingText = '';
-
-          if (_currentTurn >= _maxTurns) {
-            _isCompleted = true;
-          }
-        });
       }
     } catch (e) {
       if (mounted) {
@@ -146,6 +214,38 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen> {
     }
 
     _scrollToBottom();
+  }
+
+  Future<void> _playAudio(String base64Audio) async {
+    debugPrint('_playAudio called with ${base64Audio.length} chars');
+    try {
+      // Base64 데이터를 바이트로 디코딩
+      final bytes = base64Decode(base64Audio);
+      debugPrint('Decoded ${bytes.length} bytes');
+
+      // 임시 디렉토리에 파일 저장
+      final tempDir = await getTemporaryDirectory();
+      final tempFile = File('${tempDir.path}/chat_audio_${DateTime.now().millisecondsSinceEpoch}.wav');
+      await tempFile.writeAsBytes(bytes);
+      debugPrint('Saved audio to: ${tempFile.path}');
+
+      // 파일에서 재생
+      debugPrint('Setting audio source...');
+      await _audioPlayer.setFilePath(tempFile.path);
+      debugPrint('Playing audio...');
+      await _audioPlayer.play();
+      debugPrint('Audio play started');
+
+      // 재생 완료 후 임시 파일 삭제
+      _audioPlayer.playerStateStream.listen((state) {
+        if (state.processingState == ProcessingState.completed) {
+          tempFile.delete().catchError((_) => tempFile);
+        }
+      });
+    } catch (e, stackTrace) {
+      debugPrint('Audio playback error: $e');
+      debugPrint('Stack trace: $stackTrace');
+    }
   }
 
   void _scrollToBottom() {
@@ -230,90 +330,49 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen> {
             ),
         ],
       ),
-      body: _session == null ? _buildTopicSelection() : _buildChatView(),
+      body: _buildBody(),
     );
   }
 
-  Widget _buildTopicSelection() {
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(24),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text(
-            '대화 주제를 선택하세요',
-            style: TextStyle(
-              fontSize: 24,
-              fontWeight: FontWeight.bold,
-              color: AppColors.gray900,
-            ),
-          ),
-          const SizedBox(height: 8),
-          const Text(
-            'AI와 선택한 주제로 일본어 대화를 연습해보세요',
-            style: TextStyle(
-              fontSize: 16,
-              color: AppColors.gray500,
-            ),
-          ),
-          const SizedBox(height: 32),
-          if (_isLoading)
-            const Center(child: CircularProgressIndicator())
-          else
-            ..._topicSuggestions.map((topic) => _buildTopicCard(
-                  topic: topic['topic']!,
-                  label: topic['label']!,
-                )),
-        ],
-      ),
-    );
-  }
+  Widget _buildBody() {
+    if (_isLoading) {
+      return const Center(
+        child: CircularProgressIndicator(),
+      );
+    }
 
-  Widget _buildTopicCard({required String topic, required String label}) {
-    return GestureDetector(
-      onTap: () => _startConversation(topic, label),
-      child: Container(
-        margin: const EdgeInsets.only(bottom: 12),
-        padding: const EdgeInsets.all(20),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: AppColors.gray100),
-        ),
-        child: Row(
+    if (_session == null) {
+      return Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
           children: [
-            Container(
-              width: 48,
-              height: 48,
-              decoration: BoxDecoration(
-                color: AppColors.primaryLight,
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: const Icon(
-                Icons.chat_bubble_outline,
-                color: AppColors.primary,
-              ),
-            ),
-            const SizedBox(width: 16),
-            Expanded(
-              child: Text(
-                label,
-                style: const TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w600,
-                  color: AppColors.gray900,
-                ),
-              ),
-            ),
             const Icon(
-              Icons.arrow_forward_ios,
-              size: 16,
+              Icons.error_outline,
+              size: 48,
               color: AppColors.gray400,
+            ),
+            const SizedBox(height: 16),
+            const Text(
+              '세션을 시작할 수 없습니다',
+              style: TextStyle(
+                fontSize: 16,
+                color: AppColors.gray500,
+              ),
+            ),
+            const SizedBox(height: 16),
+            ElevatedButton(
+              onPressed: () {
+                setState(() => _isLoading = true);
+                _startConversation();
+              },
+              child: const Text('다시 시도'),
             ),
           ],
         ),
-      ),
-    );
+      );
+    }
+
+    return _buildChatView();
   }
 
   Widget _buildChatView() {
@@ -340,13 +399,14 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen> {
                   _streamingText.isNotEmpty) {
                 return _buildMessageBubble(
                   Message(content: _streamingText, isUser: false),
+                  index: -1,
                   isStreaming: true,
                 );
               }
               if (index == _messages.length && _isStreaming) {
                 return _buildTypingIndicator();
               }
-              return _buildMessageBubble(_messages[index]);
+              return _buildMessageBubble(_messages[index], index: index);
             },
           ),
         ),
@@ -398,59 +458,121 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen> {
         // Input
         if (!_isCompleted)
           Container(
-            padding: EdgeInsets.only(
-              left: 16,
-              right: 16,
-              top: 12,
-              bottom: MediaQuery.of(context).padding.bottom + 12,
-            ),
             decoration: const BoxDecoration(
               color: Colors.white,
               border: Border(
                 top: BorderSide(color: AppColors.gray100),
               ),
             ),
-            child: Row(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
               children: [
-                Expanded(
-                  child: TextField(
-                    controller: _controller,
-                    enabled: !_isStreaming,
-                    decoration: InputDecoration(
-                      hintText: '일본어로 대화해보세요...',
-                      hintStyle: const TextStyle(color: AppColors.gray400),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(24),
-                        borderSide: BorderSide.none,
-                      ),
-                      filled: true,
-                      fillColor: AppColors.gray50,
-                      contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 20,
-                        vertical: 12,
-                      ),
+                // Suggestions
+                if (_suggestions.isNotEmpty && !_isStreaming)
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+                    child: Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: _suggestions.map((suggestion) {
+                        return GestureDetector(
+                          onTap: () {
+                            _controller.text = suggestion.text;
+                            _sendMessage();
+                          },
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 8,
+                            ),
+                            decoration: BoxDecoration(
+                              color: AppColors.primaryLight,
+                              borderRadius: BorderRadius.circular(16),
+                              border: Border.all(
+                                color: AppColors.primary.withValues(alpha: 0.3),
+                              ),
+                            ),
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  suggestion.text,
+                                  style: const TextStyle(
+                                    fontSize: 14,
+                                    color: AppColors.primaryDark,
+                                  ),
+                                ),
+                                if (suggestion.textKr != null) ...[
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    suggestion.textKr!,
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      color: AppColors.gray500,
+                                    ),
+                                  ),
+                                ],
+                              ],
+                            ),
+                          ),
+                        );
+                      }).toList(),
                     ),
-                    onSubmitted: (_) => _sendMessage(),
                   ),
-                ),
-                const SizedBox(width: 12),
-                Container(
-                  width: 48,
-                  height: 48,
-                  decoration: BoxDecoration(
-                    color: _controller.text.trim().isEmpty || _isStreaming
-                        ? AppColors.gray200
-                        : AppColors.primary,
-                    shape: BoxShape.circle,
+                // Input field
+                Padding(
+                  padding: EdgeInsets.only(
+                    left: 16,
+                    right: 16,
+                    top: 12,
+                    bottom: MediaQuery.of(context).padding.bottom + 12,
                   ),
-                  child: IconButton(
-                    onPressed: _isStreaming ? null : _sendMessage,
-                    icon: Icon(
-                      _isStreaming ? Icons.more_horiz : Icons.send,
-                      color: _controller.text.trim().isEmpty || _isStreaming
-                          ? AppColors.gray400
-                          : Colors.white,
-                    ),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: TextField(
+                          controller: _controller,
+                          enabled: !_isStreaming,
+                          decoration: InputDecoration(
+                            hintText: '일본어로 대화해보세요...',
+                            hintStyle: const TextStyle(color: AppColors.gray400),
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(24),
+                              borderSide: BorderSide.none,
+                            ),
+                            filled: true,
+                            fillColor: AppColors.gray50,
+                            contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 20,
+                              vertical: 12,
+                            ),
+                          ),
+                          onSubmitted: (_) => _sendMessage(),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Container(
+                        width: 48,
+                        height: 48,
+                        decoration: BoxDecoration(
+                          color: _controller.text.trim().isEmpty || _isStreaming
+                              ? AppColors.gray200
+                              : AppColors.primary,
+                          shape: BoxShape.circle,
+                        ),
+                        child: IconButton(
+                          onPressed: _isStreaming ? null : _sendMessage,
+                          icon: Icon(
+                            _isStreaming ? Icons.more_horiz : Icons.send,
+                            color: _controller.text.trim().isEmpty || _isStreaming
+                                ? AppColors.gray400
+                                : Colors.white,
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ],
@@ -460,7 +582,10 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen> {
     );
   }
 
-  Widget _buildMessageBubble(Message message, {bool isStreaming = false}) {
+  Widget _buildMessageBubble(Message message, {required int index, bool isStreaming = false}) {
+    final isExpanded = _expandedMessages.contains(index);
+    final hasTranslation = message.contentKr != null && !message.isUser;
+
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
       child: Row(
@@ -490,50 +615,97 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen> {
             const SizedBox(width: 8),
           ],
           Flexible(
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-              decoration: BoxDecoration(
-                color: message.isUser ? AppColors.primary : Colors.white,
-                borderRadius: BorderRadius.only(
-                  topLeft: const Radius.circular(16),
-                  topRight: const Radius.circular(16),
-                  bottomLeft: Radius.circular(message.isUser ? 16 : 4),
-                  bottomRight: Radius.circular(message.isUser ? 4 : 16),
-                ),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.05),
-                    blurRadius: 4,
-                    offset: const Offset(0, 2),
+            child: GestureDetector(
+              onTap: hasTranslation
+                  ? () {
+                      setState(() {
+                        if (isExpanded) {
+                          _expandedMessages.remove(index);
+                        } else {
+                          _expandedMessages.add(index);
+                        }
+                      });
+                    }
+                  : null,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                decoration: BoxDecoration(
+                  color: message.isUser ? AppColors.primary : Colors.white,
+                  borderRadius: BorderRadius.only(
+                    topLeft: const Radius.circular(16),
+                    topRight: const Radius.circular(16),
+                    bottomLeft: Radius.circular(message.isUser ? 16 : 4),
+                    bottomRight: Radius.circular(message.isUser ? 4 : 16),
                   ),
-                ],
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Flexible(
-                    child: Text(
-                      message.content,
-                      style: TextStyle(
-                        fontSize: 16,
-                        color:
-                            message.isUser ? Colors.white : AppColors.gray900,
-                        height: 1.4,
-                      ),
-                    ),
-                  ),
-                  if (isStreaming) ...[
-                    const SizedBox(width: 8),
-                    SizedBox(
-                      width: 12,
-                      height: 12,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        color: AppColors.gray400,
-                      ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.05),
+                      blurRadius: 4,
+                      offset: const Offset(0, 2),
                     ),
                   ],
-                ],
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Flexible(
+                          child: Text(
+                            message.content,
+                            style: TextStyle(
+                              fontSize: 16,
+                              color:
+                                  message.isUser ? Colors.white : AppColors.gray900,
+                              height: 1.4,
+                            ),
+                          ),
+                        ),
+                        if (isStreaming) ...[
+                          const SizedBox(width: 8),
+                          SizedBox(
+                            width: 12,
+                            height: 12,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: AppColors.gray400,
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                    // 번역 애니메이션
+                    AnimatedCrossFade(
+                      firstChild: const SizedBox.shrink(),
+                      secondChild: hasTranslation
+                          ? Padding(
+                              padding: const EdgeInsets.only(top: 8),
+                              child: Container(
+                                padding: const EdgeInsets.all(8),
+                                decoration: BoxDecoration(
+                                  color: AppColors.gray50,
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: Text(
+                                  message.contentKr!,
+                                  style: const TextStyle(
+                                    fontSize: 13,
+                                    color: AppColors.gray600,
+                                    height: 1.4,
+                                  ),
+                                ),
+                              ),
+                            )
+                          : const SizedBox.shrink(),
+                      crossFadeState: isExpanded
+                          ? CrossFadeState.showSecond
+                          : CrossFadeState.showFirst,
+                      duration: const Duration(milliseconds: 200),
+                    ),
+                  ],
+                ),
               ),
             ),
           ),

@@ -285,9 +285,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                           title: '플래시 카드',
                           subtitle: '빠른 복습',
                           color: AppColors.warning,
-                          onTap: () {
-                            // TODO: Flash card
-                          },
+                          onTap: () => context.push('/flash'),
                         ),
                       ),
                     ],

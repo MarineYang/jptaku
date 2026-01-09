@@ -63,14 +63,20 @@ class ApiService {
 
   // ==================== Auth ====================
 
-  /// Get Google OAuth URL for login
-  Future<String?> getGoogleOAuthUrl() async {
+  /// Authenticate with Google ID Token
+  Future<Map<String, String>?> signInWithGoogleToken(String idToken) async {
     try {
-      final response = await _dio.get('/api/auth/google', queryParameters: {
-        'state': 'mobile',
+      final response = await _dio.post('/api/auth/google/token', data: {
+        'id_token': idToken,
       });
       final data = _extractData(response);
-      return data?['url'];
+      if (data != null) {
+        return {
+          'access_token': data['access_token'] as String,
+          'refresh_token': data['refresh_token'] as String,
+        };
+      }
+      return null;
     } catch (e) {
       return null;
     }
@@ -336,7 +342,7 @@ class ApiService {
   // ==================== Chat ====================
 
   /// Create chat session
-  Future<ChatSession?> createChatSession({
+  Future<CreateSessionResponse?> createChatSession({
     required String topic,
     String? topicDetail,
   }) async {
@@ -346,7 +352,7 @@ class ApiService {
         if (topicDetail != null) 'topic_detail': topicDetail,
       });
       final data = _extractData(response);
-      return ChatSession.fromJson(data);
+      return CreateSessionResponse.fromJson(data);
     } catch (e) {
       return null;
     }
@@ -374,12 +380,14 @@ class ApiService {
   }
 
   /// Send message with SSE streaming
-  Stream<String> sendMessageStream({
+  Stream<SSEEvent> sendMessageStream({
     required int sessionId,
     required String message,
   }) async* {
+    print('sendMessageStream called: sessionId=$sessionId, message=$message');
     try {
       final token = await _storage.read(key: AppConstants.accessTokenKey);
+      print('Token: ${token != null ? "exists" : "null"}');
 
       final response = await _dio.post(
         '/api/chat/session/$sessionId/message',
@@ -393,29 +401,89 @@ class ApiService {
         ),
       );
 
+      print('SSE Response received, status: ${response.statusCode}');
       final stream = response.data.stream as Stream<List<int>>;
       String buffer = '';
 
       await for (final chunk in stream) {
-        buffer += utf8.decode(chunk);
+        final decoded = utf8.decode(chunk);
+        // 오디오 데이터는 매우 길어서 로그 생략
+        if (decoded.length > 500) {
+          print('SSE Chunk received: (large data ${decoded.length} chars)');
+        } else {
+          print('SSE Chunk received: $decoded');
+        }
+        buffer += decoded;
 
+        // SSE 이벤트는 \n\n으로 구분됨
+        // 큰 오디오 데이터가 여러 청크에 걸쳐 올 수 있으므로
+        // 완전한 이벤트(\n\n으로 끝나는)가 있을 때만 처리
         while (buffer.contains('\n\n')) {
           final index = buffer.indexOf('\n\n');
           final eventData = buffer.substring(0, index);
           buffer = buffer.substring(index + 2);
 
+          if (eventData.length > 500) {
+            print('SSE Event data: (large event ${eventData.length} chars)');
+          } else {
+            print('SSE Event data: $eventData');
+          }
+
+          // 이벤트 내의 각 라인 처리
+          String? dataLine;
           for (final line in eventData.split('\n')) {
-            if (line.startsWith('data: ')) {
-              final data = line.substring(6);
-              if (data != '[DONE]') {
-                yield data;
+            // data: 또는 data:로 시작하는 라인 찾기
+            if (line.startsWith('data:')) {
+              dataLine = line.startsWith('data: ')
+                  ? line.substring(6)
+                  : line.substring(5);
+              break;
+            }
+          }
+
+          if (dataLine != null && dataLine != '[DONE]' && dataLine != 'connection closed') {
+            if (dataLine.length > 500) {
+              print('SSE Data line: (large data ${dataLine.length} chars)');
+            } else {
+              print('SSE Data line: $dataLine');
+            }
+            try {
+              final json = jsonDecode(dataLine) as Map<String, dynamic>;
+              print('SSE Parsed JSON type: ${json['type']}');
+              yield SSEEvent.fromJson(json);
+            } catch (e) {
+              print('SSE JSON parse error: $e, data preview: ${dataLine.substring(0, dataLine.length > 100 ? 100 : dataLine.length)}...');
+            }
+          }
+        }
+      }
+
+      // 스트림 종료 후 남은 버퍼 처리
+      if (buffer.trim().isNotEmpty) {
+        print('SSE Remaining buffer: $buffer');
+        for (final line in buffer.split('\n')) {
+          if (line.startsWith('data:')) {
+            final data = line.startsWith('data: ')
+                ? line.substring(6)
+                : line.substring(5);
+            if (data != '[DONE]' && data != 'connection closed' && data.isNotEmpty) {
+              try {
+                final json = jsonDecode(data) as Map<String, dynamic>;
+                print('SSE Remaining JSON type: ${json['type']}');
+                yield SSEEvent.fromJson(json);
+              } catch (e) {
+                print('SSE Remaining JSON parse error: $e');
               }
             }
           }
         }
       }
-    } catch (e) {
-      yield '[ERROR]';
+
+      print('SSE Stream ended');
+    } catch (e, stackTrace) {
+      print('SSE Error: $e');
+      print('SSE Stack: $stackTrace');
+      yield SSEEvent(type: SSEEventType.error, error: e.toString());
     }
   }
 

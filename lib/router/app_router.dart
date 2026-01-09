@@ -8,13 +8,14 @@ import '../presentation/screens/main/main_screen.dart';
 import '../presentation/screens/sentence_detail/sentence_detail_screen.dart';
 import '../presentation/screens/conversation/conversation_screen.dart';
 import '../presentation/screens/feedback/feedback_screen.dart';
+import '../presentation/screens/flash/flash_card_screen.dart';
 
 final routerProvider = Provider<GoRouter>((ref) {
-  final authState = ref.watch(authProvider);
-
-  return GoRouter(
+  final router = GoRouter(
     initialLocation: '/login',
+    refreshListenable: RouterRefreshNotifier(ref),
     redirect: (context, state) {
+      final authState = ref.read(authProvider);
       final isLoggedIn = authState.isLoggedIn;
       final isOnboarded = authState.isOnboarded;
       final isLoading = authState.isLoading;
@@ -77,6 +78,10 @@ final routerProvider = Provider<GoRouter>((ref) {
           return FeedbackScreen(sessionId: sessionId);
         },
       ),
+      GoRoute(
+        path: '/flash',
+        builder: (context, state) => const FlashCardScreen(),
+      ),
     ],
     errorBuilder: (context, state) => Scaffold(
       body: Center(
@@ -96,4 +101,17 @@ final routerProvider = Provider<GoRouter>((ref) {
       ),
     ),
   );
+
+  return router;
 });
+
+/// Notifier to refresh router when auth state changes
+class RouterRefreshNotifier extends ChangeNotifier {
+  RouterRefreshNotifier(this._ref) {
+    _ref.listen(authProvider, (_, __) {
+      notifyListeners();
+    });
+  }
+
+  final Ref _ref;
+}
