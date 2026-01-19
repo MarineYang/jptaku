@@ -362,12 +362,14 @@ class ChatMessage {
   final int id;
   final String role;
   final String content;
+  final String? contentKr;
   final DateTime? createdAt;
 
   ChatMessage({
     required this.id,
     required this.role,
     required this.content,
+    this.contentKr,
     this.createdAt,
   });
 
@@ -376,6 +378,7 @@ class ChatMessage {
       id: json['id'] ?? 0,
       role: json['role'] ?? 'user',
       content: json['content'] ?? '',
+      contentKr: json['content_kr'],
       createdAt: json['created_at'] != null
           ? DateTime.parse(json['created_at'])
           : null,
@@ -391,6 +394,9 @@ class ChatSession {
   final String? topicDetail;
   final String status;
   final List<ChatMessage> messages;
+  final List<ChatSuggestion> suggestions;
+  final int currentTurn;
+  final int maxTurn;
   final DateTime? createdAt;
   final DateTime? endedAt;
 
@@ -400,6 +406,9 @@ class ChatSession {
     this.topicDetail,
     this.status = 'active',
     this.messages = const [],
+    this.suggestions = const [],
+    this.currentTurn = 0,
+    this.maxTurn = 8,
     this.createdAt,
     this.endedAt,
   });
@@ -414,6 +423,12 @@ class ChatSession {
               ?.map((m) => ChatMessage.fromJson(m))
               .toList() ??
           [],
+      suggestions: (json['suggestions'] as List<dynamic>?)
+              ?.map((s) => ChatSuggestion.fromJson(s))
+              .toList() ??
+          [],
+      currentTurn: json['current_turn'] ?? 0,
+      maxTurn: json['max_turn'] ?? 8,
       createdAt: json['created_at'] != null
           ? DateTime.parse(json['created_at'])
           : null,
@@ -428,18 +443,67 @@ class ChatSession {
 class ChatSuggestion {
   final String text;
   final String? textKr;
+  final bool isTodaySentence;
 
   ChatSuggestion({
     required this.text,
     this.textKr,
+    this.isTodaySentence = false,
   });
 
   factory ChatSuggestion.fromJson(Map<String, dynamic> json) {
     return ChatSuggestion(
       text: json['text'] ?? '',
       textKr: json['text_kr'],
+      isTodaySentence: json['is_today_sentence'] ?? false,
     );
   }
+
+  ChatSuggestion copyWith({
+    String? text,
+    String? textKr,
+    bool? isTodaySentence,
+  }) {
+    return ChatSuggestion(
+      text: text ?? this.text,
+      textKr: textKr ?? this.textKr,
+      isTodaySentence: isTodaySentence ?? this.isTodaySentence,
+    );
+  }
+}
+
+/// 세션 메시지 (번역 포함) - 세션 재개 시 사용
+class SessionMessage {
+  final int id;
+  final int sessionId;
+  final String role;
+  final String content;
+  final String? contentKr;
+  final DateTime? createdAt;
+
+  SessionMessage({
+    required this.id,
+    required this.sessionId,
+    required this.role,
+    required this.content,
+    this.contentKr,
+    this.createdAt,
+  });
+
+  factory SessionMessage.fromJson(Map<String, dynamic> json) {
+    return SessionMessage(
+      id: json['id'] ?? 0,
+      sessionId: json['session_id'] ?? 0,
+      role: json['role'] ?? 'user',
+      content: json['content'] ?? '',
+      contentKr: json['content_kr'],
+      createdAt: json['created_at'] != null
+          ? DateTime.parse(json['created_at'])
+          : null,
+    );
+  }
+
+  bool get isUser => role == 'user';
 }
 
 class CreateSessionResponse {
@@ -448,6 +512,8 @@ class CreateSessionResponse {
   final String? greetingKr;
   final List<ChatSuggestion> suggestions;
   final String? audio;
+  final List<SessionMessage> messages; // 세션 재개 시 기존 메시지들 (번역 포함)
+  final bool isResumed; // 기존 세션 재개 여부
 
   CreateSessionResponse({
     required this.session,
@@ -455,6 +521,8 @@ class CreateSessionResponse {
     this.greetingKr,
     this.suggestions = const [],
     this.audio,
+    this.messages = const [],
+    this.isResumed = false,
   });
 
   factory CreateSessionResponse.fromJson(Map<String, dynamic> json) {
@@ -467,6 +535,11 @@ class CreateSessionResponse {
               .toList() ??
           [],
       audio: json['audio'],
+      messages: (json['messages'] as List<dynamic>?)
+              ?.map((m) => SessionMessage.fromJson(m))
+              .toList() ??
+          [],
+      isResumed: json['is_resumed'] ?? false,
     );
   }
 }

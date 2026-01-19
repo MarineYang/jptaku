@@ -69,16 +69,20 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     Container(
-                      width: 96,
-                      height: 96,
+                      width: 108,
+                      height: 108,
                       decoration: BoxDecoration(
-                        color: AppColors.primary,
-                        borderRadius: BorderRadius.circular(24),
+                        gradient: const LinearGradient(
+                          colors: [AppColors.primary, AppColors.secondary],
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                        ),
+                        borderRadius: BorderRadius.circular(28),
                         boxShadow: [
                           BoxShadow(
-                            color: AppColors.primary.withValues(alpha: 0.3),
-                            blurRadius: 16,
-                            offset: const Offset(0, 8),
+                            color: AppColors.primary.withValues(alpha: 0.4),
+                            blurRadius: 24,
+                            offset: const Offset(0, 12),
                           ),
                         ],
                       ),
@@ -86,8 +90,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                         child: Text(
                           '日',
                           style: TextStyle(
-                            fontSize: 40,
-                            fontWeight: FontWeight.bold,
+                            fontSize: 48,
+                            fontWeight: FontWeight.w900,
                             color: Colors.white,
                           ),
                         ),
@@ -142,23 +146,21 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                                 color: AppColors.primary,
                               ),
                             )
-                          : const Row(
+                          : Row(
                               mainAxisAlignment: MainAxisAlignment.center,
                               children: [
-                                Text(
-                                  'G',
-                                  style: TextStyle(
-                                    fontSize: 18,
-                                    fontWeight: FontWeight.bold,
-                                    color: AppColors.gray900,
-                                  ),
+                                Image.asset(
+                                  'assets/images/google_logo.png',
+                                  width: 24,
+                                  height: 24,
                                 ),
-                                SizedBox(width: 12),
-                                Text(
-                                  'Google로 로그인',
+                                const SizedBox(width: 12),
+                                const Text(
+                                  'Google 로그인',
                                   style: TextStyle(
                                     fontSize: 16,
                                     color: AppColors.gray900,
+                                    fontWeight: FontWeight.w500,
                                   ),
                                 ),
                               ],

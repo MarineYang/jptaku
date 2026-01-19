@@ -169,26 +169,48 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
                 const SizedBox(height: 32),
 
-                // Today's Sentences
+                // Today's Sentences (Step 1)
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 24),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text(
-                        '오늘의 5문장',
-                        style: TextStyle(
-                          fontSize: 20,
-                          fontWeight: FontWeight.bold,
-                          color: AppColors.gray900,
-                        ),
-                      ),
-                      Text(
-                        '${stats?.sentencesLearned ?? 0}/5',
-                        style: const TextStyle(
-                          fontSize: 14,
-                          color: AppColors.gray500,
-                        ),
+                      Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 10, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: AppColors.primary.withValues(alpha: 0.1),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: const Text(
+                              'Step 1',
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.bold,
+                                color: AppColors.primary,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          const Text(
+                            '오늘의 5문장',
+                            style: TextStyle(
+                              fontSize: 20,
+                              fontWeight: FontWeight.bold,
+                              color: AppColors.gray900,
+                            ),
+                          ),
+                          const Spacer(),
+                          Text(
+                            '${stats?.sentencesLearned ?? 0}/5',
+                            style: const TextStyle(
+                              fontSize: 14,
+                              color: AppColors.gray500,
+                            ),
+                          ),
+                        ],
                       ),
                     ],
                   ),
@@ -262,33 +284,33 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                     },
                   ),
 
-                const SizedBox(height: 24),
+                const SizedBox(height: 32),
 
-                // Quick Actions
+                // Step 2: Flashcards
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 24),
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: _buildQuickActionCard(
-                          icon: Icons.chat_bubble_outline,
-                          title: 'AI 회화',
-                          subtitle: '실전 대화 연습',
-                          color: AppColors.success,
-                          onTap: () => context.push('/conversation'),
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: _buildQuickActionCard(
-                          icon: Icons.style,
-                          title: '플래시 카드',
-                          subtitle: '빠른 복습',
-                          color: AppColors.warning,
-                          onTap: () => context.push('/flash'),
-                        ),
-                      ),
-                    ],
+                  child: _buildStepCard(
+                    step: 2,
+                    icon: Icons.style,
+                    title: '플래시 카드',
+                    description: '학습한 문장을 카드로 빠르게 복습해요',
+                    color: AppColors.warning,
+                    onTap: () => context.push('/flash'),
+                  ),
+                ),
+
+                const SizedBox(height: 24),
+
+                // Step 3: AI Conversation
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 24),
+                  child: _buildStepCard(
+                    step: 3,
+                    icon: Icons.chat_bubble_outline,
+                    title: 'AI 회화',
+                    description: '배운 표현을 사용하여 AI와 대화해봐요',
+                    color: AppColors.success,
+                    onTap: () => context.push('/conversation'),
                   ),
                 ),
 
@@ -424,50 +446,95 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     );
   }
 
-  Widget _buildQuickActionCard({
+  Widget _buildStepCard({
+    required int step,
     required IconData icon,
     required String title,
-    required String subtitle,
+    required String description,
     required Color color,
     required VoidCallback onTap,
   }) {
     return GestureDetector(
       onTap: onTap,
       child: Container(
-        padding: const EdgeInsets.all(16),
+        width: double.infinity,
+        padding: const EdgeInsets.all(24),
         decoration: BoxDecoration(
           color: Colors.white,
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: BorderRadius.circular(20),
           border: Border.all(color: AppColors.gray100),
+          boxShadow: [
+            BoxShadow(
+              color: AppColors.gray900.withValues(alpha: 0.05),
+              blurRadius: 20,
+              offset: const Offset(0, 4),
+            ),
+          ],
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Container(
-              width: 44,
-              height: 44,
-              decoration: BoxDecoration(
-                color: color.withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Icon(icon, color: color, size: 22),
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: color.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Text(
+                    'Step $step',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                      color: color,
+                    ),
+                  ),
+                ),
+                const Spacer(),
+                Icon(Icons.arrow_forward_ios,
+                    size: 16, color: AppColors.gray400),
+              ],
             ),
-            const SizedBox(height: 12),
-            Text(
-              title,
-              style: const TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.bold,
-                color: AppColors.gray900,
-              ),
-            ),
-            const SizedBox(height: 2),
-            Text(
-              subtitle,
-              style: const TextStyle(
-                fontSize: 12,
-                color: AppColors.gray500,
-              ),
+            const SizedBox(height: 16),
+            Row(
+              children: [
+                Container(
+                  width: 56,
+                  height: 56,
+                  decoration: BoxDecoration(
+                    color: color.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  child: Icon(icon, color: color, size: 28),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        title,
+                        style: const TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.bold,
+                          color: AppColors.gray900,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        description,
+                        style: const TextStyle(
+                          fontSize: 14,
+                          color: AppColors.gray500,
+                          height: 1.4,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
             ),
           ],
         ),

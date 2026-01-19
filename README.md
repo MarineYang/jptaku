@@ -18,99 +18,113 @@ AI와의 대화를 통해 실제로 사용할 수 있는 일본어 문장을 학
 
 ## 🛠️ 기술 스택
 
-- **Framework**: Expo (React Native)
-- **Language**: TypeScript
-- **Navigation**: React Navigation
-- **State Management**: Zustand + AsyncStorage
-- **Data Fetching**: TanStack Query
-- **TTS**: Expo Speech
-- **Auth**: Expo Web Browser (OAuth)
+- **Framework**: Flutter
+- **Language**: Dart
+- **Navigation**: GoRouter (StatefulShellRoute 적용)
+- **State Management**: Riverpod
+- **Networking**: Dio (with SSE support)
+- **Auth**: Google Sign In
+- **Audio**: Just Audio
 
 ## 📁 프로젝트 구조
 
 ```
 jptaku/
-├── App.tsx                    # 앱 진입점
-├── app.json                   # Expo 설정
-├── src/
-│   ├── navigation/           # React Navigation 설정
-│   │   └── AppNavigator.tsx
-│   ├── screens/              # 화면 컴포넌트
-│   │   ├── LoginScreen.tsx
-│   │   ├── OnboardingScreen.tsx
-│   │   ├── HomeScreen.tsx
-│   │   ├── SentenceDetailScreen.tsx
-│   │   ├── ConversationScreen.tsx
-│   │   ├── FeedbackScreen.tsx
-│   │   └── MyPageScreen.tsx
-│   └── store/                # Zustand 상태 관리
-│       └── useAppStore.ts
-├── assets/                   # 앱 아이콘, 스플래시
-└── ios/                      # iOS 네이티브 빌드
+├── lib/
+│   ├── core/                 # 상수, 테마, 유틸리티
+│   ├── data/                 # 데이터 계층 (Models, Repositories, Services)
+│   ├── presentation/         # UI 계층 (Screens, Widgets, Providers)
+│   │   ├── screens/
+│   │   │   ├── conversation/
+│   │   │   ├── home/
+│   │   │   ├── login/
+│   │   │   ├── main/
+│   │   │   ├── mypage/
+│   │   │   └── onboarding/
+│   │   └── providers/
+│   ├── router/               # 네비게이션 설정 (AppRouter)
+│   └── main.dart             # 앱 진입점
+├── assets/                   # 이미지, 폰트 등 리소스
+├── ios/                      # iOS 네이티브 프로젝트
+└── android/                  # Android 네이티브 프로젝트
 ```
 
 ## 🚀 시작하기
 
 ### 사전 요구사항
 
-- Node.js 18 이상
-- Xcode (iOS 빌드용)
-- Android Studio (Android 빌드용)
+- Flutter SDK Installed
+- Xcode (iOS 실행용)
+- Android Studio (Android 실행용)
 
 ### 설치
 
 ```bash
 # 의존성 설치
-npm install
+flutter pub get
 ```
 
-### 개발 서버 실행
+### 앱 실행 방법
+
+#### 1. iOS 시뮬레이터 실행
+
+터미널에서 먼저 시뮬레이터를 실행합니다. (또는 Spotlight 검색으로 'Simulator' 앱 실행)
 
 ```bash
-# Expo 개발 서버 시작
-npx expo start
-
-# iOS 시뮬레이터에서 실행
-npx expo run:ios
-
-# Android 에뮬레이터에서 실행
-npx expo run:android
+open -a Simulator
 ```
 
-### 환경 변수 설정
+#### 2. 앱 빌드 및 실행
 
-`.env` 파일을 생성하고 API URL을 설정하세요:
+프로젝트 루트 경로에서 아래 명령어를 실행합니다.
 
+flutter 빌드 명령어 
+
+```bash
+iOS 빌드:
+flutter build ios
+
+Android 빌드:
+flutter build apk        # APK 파일
+flutter build appbundle  # Play Store용 AAB 파일
+
+
+릴리즈 빌드:
+flutter build ios --release
+flutter build apk --release
 ```
-EXPO_PUBLIC_API_URL=https://your-api-url.com
+
+```bash
+flutter run
 ```
+
+만약 특정 기기(예: iPhone 17 Pro)를 지정해서 실행하고 싶다면, `flutter devices`로 기기 ID를 확인한 후 실행하세요.
+
+```bash
+# 기기 목록 확인
+flutter devices
+
+# 특정 기기 실행 (예: iPhone 17 Pro)
+flutter run -d <Device ID>
+# 예: flutter run -d 210E208B
+```
+
+#### 참고 사항
+
+- 빌드 시간이 처음에는 다소 걸릴 수 있습니다 (Xcode Build).
+- `Cmd + R`로 Hot Restart, `r`로 Hot Reload가 가능합니다.
 
 ## 📱 화면 구성
 
-- **Login**: Google OAuth 로그인
-- **Onboarding**: 관심사, 레벨, 학습 목적 설정
-- **Home**: 오늘의 5문장 및 학습 시작
-- **SentenceDetail**: 문장 상세 학습 및 퀴즈
-- **Conversation**: AI와의 실시간 회화 연습
-- **Feedback**: 학습 결과 및 피드백
-- **MyPage**: 사용자 프로필 및 학습 통계
+- **Login**: Google OAuth 로그인 (그라데이션 로고 적용)
+- **Onboarding**: 관심사 및 초기 설정
+- **Home**: 학습 대시보드 (스트릭, 오늘의 문장)
+- **Conversation**: AI 실시간 회화 (Sakura Pink 테마, 스트리밍 채팅)
+- **MyPage**: 프로필, 설정, 통계
 
 ## 🔗 딥링크
 
-앱은 `jptaku://` 스키마를 지원합니다:
-
-- `jptaku://auth/callback` - OAuth 콜백
-- `jptaku://sentence/:id` - 문장 상세
-
-## 📦 주요 의존성
-
-- **expo**: ~54.0.0
-- **react-native**: 0.79.x
-- **@react-navigation/native**: ^7.x
-- **zustand**: ^4.5.0
-- **@tanstack/react-query**: ^5.x
-- **expo-speech**: TTS
-- **expo-web-browser**: OAuth
+- `jptaku://` 스키마 지원 (`GoRouter` 기반)
 
 ## 📝 라이선스
 
