@@ -48,12 +48,51 @@ class UserSettings {
   }
 }
 
+class UserOnboarding {
+  final int level;
+  final List<int> categories;
+
+  UserOnboarding({
+    this.level = 5,
+    this.categories = const [],
+  });
+
+  factory UserOnboarding.fromJson(Map<String, dynamic> json) {
+    return UserOnboarding(
+      level: json['level'] ?? 5,
+      categories: (json['categories'] as List?)?.map((e) => e as int).toList() ?? [],
+    );
+  }
+
+  String get levelName {
+    switch (level) {
+      case 3: return 'N3';
+      case 4: return 'N4';
+      case 5: return 'N5';
+      default: return 'N$level';
+    }
+  }
+
+  List<String> get categoryNames {
+    const categoryMap = {
+      1: '애니메이션',
+      2: '만화',
+      3: '게임',
+      4: '성지순례',
+      5: '음식',
+      6: '여행',
+    };
+    return categories.map((c) => categoryMap[c] ?? '카테고리$c').toList();
+  }
+}
+
 class User {
   final int id;
   final String email;
   final String? name;
   final String? avatarUrl;
   final DateTime? createdAt;
+  final UserOnboarding? onboarding;
 
   User({
     required this.id,
@@ -61,6 +100,7 @@ class User {
     this.name,
     this.avatarUrl,
     this.createdAt,
+    this.onboarding,
   });
 
   factory User.fromJson(Map<String, dynamic> json) {
@@ -71,6 +111,9 @@ class User {
       avatarUrl: json['avatar_url'],
       createdAt: json['created_at'] != null
           ? DateTime.parse(json['created_at'])
+          : null,
+      onboarding: json['onboarding'] != null
+          ? UserOnboarding.fromJson(json['onboarding'])
           : null,
     );
   }
@@ -89,6 +132,7 @@ class User {
     String? name,
     String? avatarUrl,
     DateTime? createdAt,
+    UserOnboarding? onboarding,
   }) {
     return User(
       id: id ?? this.id,
@@ -96,6 +140,7 @@ class User {
       name: name ?? this.name,
       avatarUrl: avatarUrl ?? this.avatarUrl,
       createdAt: createdAt ?? this.createdAt,
+      onboarding: onboarding ?? this.onboarding,
     );
   }
 }

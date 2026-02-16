@@ -70,7 +70,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     // Header with Mascot
-                    _buildHeader(user?.name ?? '학습자', stats?.streakDays ?? 0),
+                    _buildHeader(user?.name ?? '학습자', stats?.totalStudyDays ?? 0),
 
                     const SizedBox(height: 20),
 
@@ -167,7 +167,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
               child: Center(
                 child: AnimatedFireIcon(
                   size: 36,
-                  isActive: (stats?.streakDays ?? 0) > 0,
+                  isActive: (stats?.totalStudyDays ?? 0) > 0,
                 ),
               ),
             ),
@@ -177,7 +177,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   const Text(
-                    '연속 학습',
+                    '학습한지',
                     style: TextStyle(
                       fontSize: 14,
                       color: Colors.white70,
@@ -188,7 +188,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
                     crossAxisAlignment: CrossAxisAlignment.end,
                     children: [
                       Text(
-                        '${stats?.streakDays ?? 0}',
+                        '${stats?.totalStudyDays ?? 0}',
                         style: const TextStyle(
                           fontSize: 36,
                           fontWeight: FontWeight.bold,
@@ -234,7 +234,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
                       ),
                       const SizedBox(width: 4),
                       Text(
-                        '${stats?.totalSentences ?? 0}문장',
+                        '${stats?.totalSentencesUsed ?? 0}문장',
                         style: const TextStyle(
                           fontSize: 12,
                           fontWeight: FontWeight.w600,
@@ -245,36 +245,35 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
                   ),
                 ),
                 const SizedBox(height: 8),
-                if ((stats?.streakDays ?? 0) >= 7)
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 8,
-                      vertical: 4,
-                    ),
-                    decoration: BoxDecoration(
-                      color: AppColors.xpGold,
-                      borderRadius: BorderRadius.circular(AppTheme.radiusSmall),
-                    ),
-                    child: const Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(
-                          Icons.star,
-                          size: 12,
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 4,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.2),
+                    borderRadius: BorderRadius.circular(AppTheme.radiusSmall),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(
+                        Icons.chat_bubble_outline,
+                        size: 12,
+                        color: Colors.white,
+                      ),
+                      const SizedBox(width: 2),
+                      Text(
+                        '${stats?.totalSessions ?? 0}회 대화',
+                        style: const TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.bold,
                           color: Colors.white,
                         ),
-                        SizedBox(width: 2),
-                        Text(
-                          '주간 달성!',
-                          style: TextStyle(
-                            fontSize: 10,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.white,
-                          ),
-                        ),
-                      ],
-                    ),
+                      ),
+                    ],
                   ),
+                ),
               ],
             ),
           ],

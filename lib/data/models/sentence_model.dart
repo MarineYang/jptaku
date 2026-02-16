@@ -609,27 +609,31 @@ class Feedback {
 
 // ==================== Stats ====================
 class TodayStats {
+  final int totalStudyDays;
+  final int totalSessions;
+  final int totalSentencesUsed;
+  // legacy fields for backward compat
   final int sentencesLearned;
-  final int minutesStudied;
   final int streakDays;
   final int totalSentences;
-  final double completionRate;
 
   TodayStats({
+    this.totalStudyDays = 0,
+    this.totalSessions = 0,
+    this.totalSentencesUsed = 0,
     this.sentencesLearned = 0,
-    this.minutesStudied = 0,
     this.streakDays = 0,
     this.totalSentences = 0,
-    this.completionRate = 0.0,
   });
 
   factory TodayStats.fromJson(Map<String, dynamic> json) {
     return TodayStats(
+      totalStudyDays: json['total_study_days'] ?? 0,
+      totalSessions: json['total_sessions'] ?? 0,
+      totalSentencesUsed: json['total_sentences_used'] ?? 0,
       sentencesLearned: json['sentences_learned'] ?? 0,
-      minutesStudied: json['minutes_studied'] ?? 0,
-      streakDays: json['streak_days'] ?? 0,
-      totalSentences: json['total_sentences'] ?? 0,
-      completionRate: (json['completion_rate'] ?? 0.0).toDouble(),
+      streakDays: json['total_study_days'] ?? json['streak_days'] ?? 0,
+      totalSentences: json['total_sentences_used'] ?? json['total_sentences'] ?? 0,
     );
   }
 }
