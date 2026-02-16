@@ -44,6 +44,7 @@ class SentenceNotifier extends StateNotifier<SentenceState> {
 
   /// Load today's sentences
   Future<void> loadTodaySentences() async {
+    if (state.isLoading) return;
     state = state.copyWith(isLoading: true);
 
     try {
@@ -51,12 +52,14 @@ class SentenceNotifier extends StateNotifier<SentenceState> {
       final todayData = await apiService.getTodaySentences();
 
       if (todayData != null) {
-        // Load progress for today's sentences
-        final progressList =
-            await apiService.getTodayLearningProgress(todayData.dailySetId);
-        final progressMap = <int, LearningProgress>{};
-        for (final progress in progressList) {
-          progressMap[progress.sentenceId] = progress;
+        // Load progress only if dailySetId is valid
+        var progressMap = <int, LearningProgress>{};
+        if (todayData.dailySetId > 0) {
+          final progressList =
+              await apiService.getTodayLearningProgress(todayData.dailySetId);
+          for (final progress in progressList) {
+            progressMap[progress.sentenceId] = progress;
+          }
         }
 
         state = state.copyWith(

@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 // ==================== Word ====================
 class Word {
   final String japanese;
@@ -306,16 +308,118 @@ class TodayFlashResponse {
 }
 
 // ==================== Chat ====================
+
+class Suggestion {
+  final String text;
+  final String textKr;
+  final bool isTodaySentence;
+
+  Suggestion({
+    required this.text,
+    required this.textKr,
+    this.isTodaySentence = false,
+  });
+
+  factory Suggestion.fromJson(Map<String, dynamic> json) {
+    return Suggestion(
+      text: json['text'] ?? '',
+      textKr: json['text_kr'] ?? '',
+      isTodaySentence: json['is_today_sentence'] ?? false,
+    );
+  }
+}
+
+enum ChatStreamEventType { content, translation, suggestions, audio, done, error }
+
+class ChatStreamEvent {
+  final ChatStreamEventType type;
+  final String? content;
+  final String? contentKr;
+  final List<Suggestion>? suggestions;
+  final String? audioBase64;
+  final int? currentTurn;
+  final int? maxTurn;
+  final bool? isCompleted;
+
+  ChatStreamEvent({
+    required this.type,
+    this.content,
+    this.contentKr,
+    this.suggestions,
+    this.audioBase64,
+    this.currentTurn,
+    this.maxTurn,
+    this.isCompleted,
+  });
+
+  factory ChatStreamEvent.fromJson(Map<String, dynamic> json) {
+    final typeStr = json['type'] as String? ?? '';
+
+    switch (typeStr) {
+      case 'content':
+        return ChatStreamEvent(
+          type: ChatStreamEventType.content,
+          content: json['content'] as String? ?? '',
+        );
+      case 'translation':
+        return ChatStreamEvent(
+          type: ChatStreamEventType.translation,
+          contentKr: json['content_kr'] as String? ?? '',
+        );
+      case 'suggestions':
+        final suggList = (json['suggestions'] as List<dynamic>?)
+            ?.map((s) => Suggestion.fromJson(s as Map<String, dynamic>))
+            .toList();
+        return ChatStreamEvent(
+          type: ChatStreamEventType.suggestions,
+          suggestions: suggList,
+        );
+      case 'audio':
+        return ChatStreamEvent(
+          type: ChatStreamEventType.audio,
+          audioBase64: json['audio'] as String?,
+        );
+      case 'done':
+        // content field contains JSON string with turn info
+        Map<String, dynamic>? turnInfo;
+        try {
+          final contentStr = json['content'] as String?;
+          if (contentStr != null) {
+            turnInfo = jsonDecode(contentStr) as Map<String, dynamic>;
+          }
+        } catch (_) {}
+        return ChatStreamEvent(
+          type: ChatStreamEventType.done,
+          currentTurn: turnInfo?['current_turn'] as int?,
+          maxTurn: turnInfo?['max_turn'] as int?,
+          isCompleted: turnInfo?['is_completed'] as bool?,
+        );
+      case 'error':
+        return ChatStreamEvent(
+          type: ChatStreamEventType.error,
+          content: json['content'] as String?,
+        );
+      default:
+        return ChatStreamEvent(
+          type: ChatStreamEventType.content,
+          content: json['content'] as String? ?? '',
+        );
+    }
+  }
+}
+
 class ChatMessage {
   final int id;
   final String role;
   final String content;
+  final String? contentKr;
   final DateTime? createdAt;
 
   ChatMessage({
     required this.id,
     required this.role,
     required this.content,
+    this.contentKr,
     this.createdAt,
   });
 
@@ -324,6 +428,7 @@ class ChatMessage {
       id: json['id'] ?? 0,
       role: json['role'] ?? 'user',
       content: json['content'] ?? '',
+      contentKr: json['content_kr'],
       createdAt: json['created_at'] != null
           ? DateTime.parse(json['created_at'])
           : null,
@@ -337,6 +442,8 @@ class ChatSession {
   final int id;
   final String topic;
   final String? topicDetail;
+  final int currentTurn;
+  final int maxTurn;
   final String status;
   final List<ChatMessage> messages;
   final DateTime? createdAt;
@@ -346,6 +453,8 @@ class ChatSession {
     required this.id,
     required this.topic,
     this.topicDetail,
+    this.currentTurn = 0,
+    this.maxTurn = 5,
     this.status = 'active',
     this.messages = const [],
     this.createdAt,
@@ -357,6 +466,8 @@ class ChatSession {
       id: json['id'] ?? 0,
       topic: json['topic'] ?? '',
       topicDetail: json['topic_detail'],
+      currentTurn: json['current_turn'] ?? 0,
+      maxTurn: json['max_turn'] ?? 5,
       status: json['status'] ?? 'active',
       messages: (json['messages'] as List<dynamic>?)
               ?.map((m) => ChatMessage.fromJson(m))
@@ -371,6 +482,44 @@ class ChatSession {
   }
 
   bool get isActive => status == 'active';
+}
+
+class CreateSessionResponse {
+  final ChatSession session;
+  final String greeting;
+  final String? greetingKr;
+  final List<Suggestion> suggestions;
+  final String? audioBase64;
+  final bool isResumed;
+  final List<ChatMessage> messages;
+
+  CreateSessionResponse({
+    required this.session,
+    required this.greeting,
+    this.greetingKr,
+    this.suggestions = const [],
+    this.audioBase64,
+    this.isResumed = false,
+    this.messages = const [],
+  });
+
+  factory CreateSessionResponse.fromJson(Map<String, dynamic> json) {
+    return CreateSessionResponse(
+      session: ChatSession.fromJson(json['session'] ?? json),
+      greeting: json['greeting'] ?? '',
+      greetingKr: json['greeting_kr'],
+      suggestions: (json['suggestions'] as List<dynamic>?)
+              ?.map((s) => Suggestion.fromJson(s as Map<String, dynamic>))
+              .toList() ??
+          [],
+      audioBase64: json['audio'] as String?,
+      isResumed: json['is_resumed'] ?? false,
+      messages: (json['messages'] as List<dynamic>?)
+              ?.map((m) => ChatMessage.fromJson(m as Map<String, dynamic>))
+              .toList() ??
+          [],
+    );
+  }
 }
 
 // ==================== Feedback ====================

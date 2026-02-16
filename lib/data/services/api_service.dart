@@ -76,6 +76,32 @@ class ApiService {
     }
   }
 
+  /// Login with Google ID token (native sign-in)
+  Future<Map<String, String>?> loginWithGoogleIdToken(String idToken) async {
+    try {
+      print('Request URL: ${_dio.options.baseUrl}/api/auth/google/token');
+      final response = await _dio.post('/api/auth/google/token', data: {
+        'id_token': idToken,
+      });
+      final data = _extractData(response);
+      final accessToken = data['access_token'] as String?;
+      final refreshToken = data['refresh_token'] as String?;
+
+      if (accessToken != null && refreshToken != null) {
+        await saveTokens(accessToken: accessToken, refreshToken: refreshToken);
+        return {'access_token': accessToken, 'refresh_token': refreshToken};
+      }
+      return null;
+    } catch (e) {
+      print('loginWithGoogleIdToken error: $e');
+      if (e is DioException) {
+        print('Response: ${e.response?.data}');
+        print('Status: ${e.response?.statusCode}');
+      }
+      return null;
+    }
+  }
+
   /// Save tokens after OAuth callback
   Future<bool> saveTokens({
     required String accessToken,
@@ -336,7 +362,7 @@ class ApiService {
   // ==================== Chat ====================
 
   /// Create chat session
-  Future<ChatSession?> createChatSession({
+  Future<CreateSessionResponse?> createChatSession({
     required String topic,
     String? topicDetail,
   }) async {
@@ -346,8 +372,9 @@ class ApiService {
         if (topicDetail != null) 'topic_detail': topicDetail,
       });
       final data = _extractData(response);
-      return ChatSession.fromJson(data);
+      return CreateSessionResponse.fromJson(data);
     } catch (e) {
+      print('createChatSession error: $e');
       return null;
     }
   }
@@ -374,7 +401,7 @@ class ApiService {
   }
 
   /// Send message with SSE streaming
-  Stream<String> sendMessageStream({
+  Stream<ChatStreamEvent> sendMessageStream({
     required int sessionId,
     required String message,
   }) async* {
@@ -397,25 +424,51 @@ class ApiService {
       String buffer = '';
 
       await for (final chunk in stream) {
-        buffer += utf8.decode(chunk);
+        final decoded = utf8.decode(chunk);
+        print('[SSE] raw chunk: $decoded');
+        buffer += decoded;
+
+        // Normalize \r\n to \n
+        buffer = buffer.replaceAll('\r\n', '\n');
 
         while (buffer.contains('\n\n')) {
           final index = buffer.indexOf('\n\n');
           final eventData = buffer.substring(0, index);
           buffer = buffer.substring(index + 2);
 
+          print('[SSE] eventBlock: $eventData');
+
+          // Collect all data: lines (SSE spec: multiple data lines joined with \n)
+          final dataLines = <String>[];
           for (final line in eventData.split('\n')) {
             if (line.startsWith('data: ')) {
-              final data = line.substring(6);
-              if (data != '[DONE]') {
-                yield data;
-              }
+              dataLines.add(line.substring(6));
+            } else if (line.startsWith('data:')) {
+              dataLines.add(line.substring(5));
             }
+          }
+
+          if (dataLines.isEmpty) continue;
+          final dataLine = dataLines.join('\n');
+
+          if (dataLine.isEmpty || dataLine == 'connection closed') continue;
+
+          try {
+            final jsonData = json.decode(dataLine) as Map<String, dynamic>;
+            print('[SSE] parsed type=${jsonData['type']}');
+            yield ChatStreamEvent.fromJson(jsonData);
+          } catch (e) {
+            print('[SSE] Parse error: $e, raw: $dataLine');
           }
         }
       }
+      print('[SSE] stream ended, remaining buffer: $buffer');
     } catch (e) {
-      yield '[ERROR]';
+      print('[SSE] stream exception: $e');
+      yield ChatStreamEvent(
+        type: ChatStreamEventType.error,
+        content: e.toString(),
+      );
     }
   }
 

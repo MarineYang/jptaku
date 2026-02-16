@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:webview_flutter/webview_flutter.dart';
+import 'package:google_sign_in/google_sign_in.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../providers/auth_provider.dart';
 
@@ -19,49 +20,53 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     setState(() => _isLoading = true);
 
     try {
-      final apiService = ref.read(apiServiceProvider);
-      final oauthUrl = await apiService.getGoogleOAuthUrl();
+      final googleSignIn = GoogleSignIn(
+        scopes: ['email', 'profile'],
+        serverClientId: dotenv.env['WEB_CLIENT_ID'],
+      );
 
-      if (oauthUrl == null) {
+      final googleUser = await googleSignIn.signIn();
+      if (googleUser == null) {
+        // User cancelled
+        setState(() => _isLoading = false);
+        return;
+      }
+
+      final googleAuth = await googleUser.authentication;
+      final idToken = googleAuth.idToken;
+
+      if (idToken == null) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('로그인 URL을 가져올 수 없습니다.')),
+            const SnackBar(content: Text('Google 인증 토큰을 가져올 수 없습니다.')),
           );
         }
         setState(() => _isLoading = false);
         return;
       }
 
+      final apiService = ref.read(apiServiceProvider);
+      final result = await apiService.loginWithGoogleIdToken(idToken);
+
+      if (result == null) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('서버 로그인에 실패했습니다.')),
+          );
+        }
+        setState(() => _isLoading = false);
+        return;
+      }
+
+      await ref.read(authProvider.notifier).checkAuth();
+
       if (mounted) {
-        final result = await Navigator.push<Map<String, String>>(
-          context,
-          MaterialPageRoute(
-            builder: (context) => OAuthWebViewScreen(initialUrl: oauthUrl),
-          ),
-        );
-
-        if (result != null && mounted) {
-          final accessToken = result['access_token'];
-          final refreshToken = result['refresh_token'];
-
-          if (accessToken != null && refreshToken != null) {
-            await apiService.saveTokens(
-              accessToken: accessToken,
-              refreshToken: refreshToken,
-            );
-
-            await ref.read(authProvider.notifier).checkAuth();
-
-            if (mounted) {
-              final authState = ref.read(authProvider);
-              if (authState.isLoggedIn) {
-                if (authState.isOnboarded) {
-                  context.go('/home');
-                } else {
-                  context.go('/onboarding');
-                }
-              }
-            }
+        final authState = ref.read(authProvider);
+        if (authState.isLoggedIn) {
+          if (authState.isOnboarded) {
+            context.go('/home');
+          } else {
+            context.go('/onboarding');
           }
         }
       }
@@ -201,115 +206,6 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
             ),
           ],
         ),
-      ),
-    );
-  }
-}
-
-// OAuth WebView Screen
-class OAuthWebViewScreen extends StatefulWidget {
-  final String initialUrl;
-
-  const OAuthWebViewScreen({super.key, required this.initialUrl});
-
-  @override
-  State<OAuthWebViewScreen> createState() => _OAuthWebViewScreenState();
-}
-
-class _OAuthWebViewScreenState extends State<OAuthWebViewScreen> {
-  late final WebViewController _controller;
-  bool _isLoading = true;
-
-  @override
-  void initState() {
-    super.initState();
-    _initWebView();
-  }
-
-  void _initWebView() {
-    _controller = WebViewController()
-      ..setJavaScriptMode(JavaScriptMode.unrestricted)
-      ..setNavigationDelegate(
-        NavigationDelegate(
-          onPageStarted: (String url) {
-            setState(() => _isLoading = true);
-          },
-          onPageFinished: (String url) {
-            setState(() => _isLoading = false);
-          },
-          onNavigationRequest: (NavigationRequest request) {
-            final uri = Uri.parse(request.url);
-
-            // Check for deep link callback (jptaku://)
-            if (uri.scheme == 'jptaku') {
-              final accessToken = uri.queryParameters['access_token'];
-              final refreshToken = uri.queryParameters['refresh_token'];
-
-              if (accessToken != null && refreshToken != null) {
-                Navigator.pop(context, {
-                  'access_token': accessToken,
-                  'refresh_token': refreshToken,
-                });
-              } else {
-                Navigator.pop(context);
-              }
-              return NavigationDecision.prevent;
-            }
-
-            // Check for callback URL with tokens in query params
-            if (uri.path.contains('/callback') ||
-                uri.queryParameters.containsKey('access_token')) {
-              final accessToken = uri.queryParameters['access_token'];
-              final refreshToken = uri.queryParameters['refresh_token'];
-
-              if (accessToken != null && refreshToken != null) {
-                Navigator.pop(context, {
-                  'access_token': accessToken,
-                  'refresh_token': refreshToken,
-                });
-                return NavigationDecision.prevent;
-              }
-            }
-
-            return NavigationDecision.navigate;
-          },
-          onWebResourceError: (WebResourceError error) {
-            // Handle deep link scheme errors silently
-            if (error.description.contains('jptaku://')) {
-              return;
-            }
-            debugPrint('WebView error: ${error.description}');
-          },
-        ),
-      )
-      ..loadRequest(Uri.parse(widget.initialUrl));
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        backgroundColor: Colors.white,
-        leading: IconButton(
-          icon: const Icon(Icons.close),
-          onPressed: () => Navigator.pop(context),
-        ),
-        title: const Text(
-          'Google 로그인',
-          style: TextStyle(
-            fontSize: 18,
-            fontWeight: FontWeight.bold,
-          ),
-        ),
-      ),
-      body: Stack(
-        children: [
-          WebViewWidget(controller: _controller),
-          if (_isLoading)
-            const Center(
-              child: CircularProgressIndicator(),
-            ),
-        ],
       ),
     );
   }

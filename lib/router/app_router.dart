@@ -9,12 +9,27 @@ import '../presentation/screens/sentence_detail/sentence_detail_screen.dart';
 import '../presentation/screens/conversation/conversation_screen.dart';
 import '../presentation/screens/feedback/feedback_screen.dart';
 
-final routerProvider = Provider<GoRouter>((ref) {
-  final authState = ref.watch(authProvider);
+/// Listenable that notifies GoRouter when auth state changes
+/// without causing the router to be recreated.
+class _AuthRefreshListenable extends ChangeNotifier {
+  _AuthRefreshListenable(Ref ref) {
+    ref.listen(authProvider, (previous, next) {
+      // Only notify on login/logout/onboarding state changes
+      if (previous?.isLoggedIn != next.isLoggedIn ||
+          previous?.isOnboarded != next.isOnboarded ||
+          previous?.isLoading != next.isLoading) {
+        notifyListeners();
+      }
+    });
+  }
+}
 
+final routerProvider = Provider<GoRouter>((ref) {
   return GoRouter(
     initialLocation: '/login',
+    refreshListenable: _AuthRefreshListenable(ref),
     redirect: (context, state) {
+      final authState = ref.read(authProvider);
       final isLoggedIn = authState.isLoggedIn;
       final isOnboarded = authState.isOnboarded;
       final isLoading = authState.isLoading;

@@ -206,8 +206,12 @@ class AuthNotifier extends StateNotifier<AuthState> {
     }
   }
 
+  bool _isRefreshingStats = false;
+
   /// Refresh stats
   Future<void> refreshStats() async {
+    if (_isRefreshingStats) return;
+    _isRefreshingStats = true;
     try {
       final stats = await _apiService.getTodayStats();
       if (stats != null) {
@@ -215,6 +219,8 @@ class AuthNotifier extends StateNotifier<AuthState> {
       }
     } catch (e) {
       // Ignore error
+    } finally {
+      _isRefreshingStats = false;
     }
   }
 
@@ -227,7 +233,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
 
 final authProvider = StateNotifierProvider<AuthNotifier, AuthState>((ref) {
   return AuthNotifier(
-    ref.watch(apiServiceProvider),
-    ref.watch(storageProvider),
+    ref.read(apiServiceProvider),
+    ref.read(storageProvider),
   );
 });

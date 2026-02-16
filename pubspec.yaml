@@ -25,8 +25,8 @@ dependencies:
   shared_preferences: ^2.3.3
   flutter_secure_storage: ^9.2.2
 
-  # WebView for OAuth
-  webview_flutter: ^4.10.0
+  # Google Sign-In
+  google_sign_in: ^6.2.2
 
   # UI
   flutter_svg: ^2.0.16
