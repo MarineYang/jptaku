@@ -8,6 +8,9 @@ import '../presentation/screens/main/main_screen.dart';
 import '../presentation/screens/sentence_detail/sentence_detail_screen.dart';
 import '../presentation/screens/conversation/conversation_screen.dart';
 import '../presentation/screens/feedback/feedback_screen.dart';
+import '../presentation/screens/home/home_screen.dart';
+import '../presentation/screens/mypage/mypage_screen.dart';
+import '../presentation/screens/flash/flash_card_screen.dart';
 
 /// Listenable that notifies GoRouter when auth state changes
 /// without causing the router to be recreated.
@@ -66,13 +69,36 @@ final routerProvider = Provider<GoRouter>((ref) {
         path: '/onboarding',
         builder: (context, state) => const OnboardingScreen(),
       ),
-      GoRoute(
-        path: '/home',
-        builder: (context, state) => const MainScreen(),
-      ),
-      GoRoute(
-        path: '/mypage',
-        builder: (context, state) => const MainScreen(),
+      StatefulShellRoute.indexedStack(
+        builder: (context, state, navigationShell) {
+          return MainScreen(navigationShell: navigationShell);
+        },
+        branches: [
+          StatefulShellBranch(
+            routes: [
+              GoRoute(
+                path: '/home',
+                builder: (context, state) => HomeScreen(),
+              ),
+            ],
+          ),
+          StatefulShellBranch(
+            routes: [
+              GoRoute(
+                path: '/stats',
+                builder: (context, state) => const StatsPlaceholder(),
+              ),
+            ],
+          ),
+          StatefulShellBranch(
+            routes: [
+              GoRoute(
+                path: '/mypage',
+                builder: (context, state) => MyPageScreen(),
+              ),
+            ],
+          ),
+        ],
       ),
       GoRoute(
         path: '/sentence/:id',
@@ -91,6 +117,10 @@ final routerProvider = Provider<GoRouter>((ref) {
           final sessionId = int.parse(state.pathParameters['sessionId']!);
           return FeedbackScreen(sessionId: sessionId);
         },
+      ),
+      GoRoute(
+        path: '/flash',
+        builder: (context, state) => const FlashCardScreen(),
       ),
     ],
     errorBuilder: (context, state) => Scaffold(

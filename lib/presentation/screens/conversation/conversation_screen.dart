@@ -231,7 +231,7 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen> {
         }
       }
 
-      print('[Chat] SSE stream ended. streamingText="${_streamingText}", translation="${_streamingTranslation}", audio=${_streamingAudio != null ? "${_streamingAudio!.length} bytes" : "null"}');
+      print('[Chat] SSE stream ended. streamingText="$_streamingText", translation="$_streamingTranslation", audio=${_streamingAudio != null ? "${_streamingAudio!.length} bytes" : "null"}');
 
       // Finalize AI message
       if (_streamingText.isNotEmpty && mounted) {

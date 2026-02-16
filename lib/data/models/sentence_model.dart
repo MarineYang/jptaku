@@ -254,36 +254,86 @@ class LearningProgress {
 // ==================== Flash ====================
 class FlashSentence {
   final int id;
+  final String? sentenceKey;
   final String jp;
   final String kr;
   final String? romaji;
+  final int level;
+  final int category;
   final String? phrase;
   final String? tip;
   final String? alt;
   final String? audioUrl;
+  final int flashCount;
+  final String? flashGrade;
+  final DateTime? nextReviewAt;
 
   FlashSentence({
     required this.id,
+    this.sentenceKey,
     required this.jp,
     required this.kr,
     this.romaji,
+    this.level = 5,
+    this.category = 1,
     this.phrase,
     this.tip,
     this.alt,
     this.audioUrl,
+    this.flashCount = 0,
+    this.flashGrade,
+    this.nextReviewAt,
   });
 
   factory FlashSentence.fromJson(Map<String, dynamic> json) {
     return FlashSentence(
       id: json['id'] ?? 0,
+      sentenceKey: json['sentence_key'],
       jp: json['jp'] ?? '',
       kr: json['kr'] ?? '',
       romaji: json['romaji'],
+      level: json['level'] ?? 5,
+      category: json['category'] ?? 1,
       phrase: json['phrase'],
       tip: json['tip'],
       alt: json['alt'],
       audioUrl: json['audio_url'],
+      flashCount: json['flash_count'] ?? 0,
+      flashGrade: json['flash_grade'],
+      nextReviewAt: json['next_review_at'] != null
+          ? DateTime.parse(json['next_review_at'])
+          : null,
     );
+  }
+
+  String get levelName {
+    switch (level) {
+      case 3:
+        return 'N3';
+      case 4:
+        return 'N4';
+      case 5:
+        return 'N5';
+      default:
+        return 'N$level';
+    }
+  }
+
+  String get categoryName {
+    switch (category) {
+      case 1:
+        return '애니메이션';
+      case 2:
+        return '게임';
+      case 3:
+        return '음악';
+      case 4:
+        return '영화';
+      case 5:
+        return '드라마';
+      default:
+        return '기타';
+    }
   }
 }
 

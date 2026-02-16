@@ -65,3 +65,4 @@ coverage/
 # Windows special files
 nul
 android/nul
+node_modules

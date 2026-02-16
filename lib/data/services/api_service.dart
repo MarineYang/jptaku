@@ -63,14 +63,20 @@ class ApiService {
 
   // ==================== Auth ====================
 
-  /// Get Google OAuth URL for login
-  Future<String?> getGoogleOAuthUrl() async {
+  /// Authenticate with Google ID Token
+  Future<Map<String, String>?> signInWithGoogleToken(String idToken) async {
     try {
-      final response = await _dio.get('/api/auth/google', queryParameters: {
-        'state': 'mobile',
+      final response = await _dio.post('/api/auth/google/token', data: {
+        'id_token': idToken,
       });
       final data = _extractData(response);
-      return data?['url'];
+      if (data != null) {
+        return {
+          'access_token': data['access_token'] as String,
+          'refresh_token': data['refresh_token'] as String,
+        };
+      }
+      return null;
     } catch (e) {
       return null;
     }
@@ -405,8 +411,10 @@ class ApiService {
     required int sessionId,
     required String message,
   }) async* {
+    print('sendMessageStream called: sessionId=$sessionId, message=$message');
     try {
       final token = await _storage.read(key: AppConstants.accessTokenKey);
+      print('Token: ${token != null ? "exists" : "null"}');
 
       final response = await _dio.post(
         '/api/chat/session/$sessionId/message',
@@ -420,6 +428,7 @@ class ApiService {
         ),
       );
 
+      print('SSE Response received, status: ${response.statusCode}');
       final stream = response.data.stream as Stream<List<int>>;
       String buffer = '';
 
@@ -431,6 +440,9 @@ class ApiService {
         // Normalize \r\n to \n
         buffer = buffer.replaceAll('\r\n', '\n');
 
+        // SSE 이벤트는 \n\n으로 구분됨
+        // 큰 오디오 데이터가 여러 청크에 걸쳐 올 수 있으므로
+        // 완전한 이벤트(\n\n으로 끝나는)가 있을 때만 처리
         while (buffer.contains('\n\n')) {
           final index = buffer.indexOf('\n\n');
           final eventData = buffer.substring(0, index);

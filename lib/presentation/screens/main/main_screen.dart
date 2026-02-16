@@ -1,31 +1,26 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import '../../../core/theme/app_colors.dart';
-import '../home/home_screen.dart';
-import '../mypage/mypage_screen.dart';
 
-class MainScreen extends StatefulWidget {
-  const MainScreen({super.key});
+class MainScreen extends StatelessWidget {
+  final StatefulNavigationShell navigationShell;
 
-  @override
-  State<MainScreen> createState() => _MainScreenState();
-}
+  const MainScreen({
+    super.key,
+    required this.navigationShell,
+  });
 
-class _MainScreenState extends State<MainScreen> {
-  int _currentIndex = 0;
-
-  final List<Widget> _screens = const [
-    HomeScreen(),
-    _StatsPlaceholder(),
-    MyPageScreen(),
-  ];
+  void _onTap(BuildContext context, int index) {
+    navigationShell.goBranch(
+      index,
+      initialLocation: index == navigationShell.currentIndex,
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: IndexedStack(
-        index: _currentIndex,
-        children: _screens,
-      ),
+      body: navigationShell,
       bottomNavigationBar: Container(
         decoration: const BoxDecoration(
           color: Colors.white,
@@ -33,37 +28,42 @@ class _MainScreenState extends State<MainScreen> {
             top: BorderSide(color: AppColors.gray100),
           ),
         ),
-        child: SafeArea(
+        child: MediaQuery.removePadding(
+          context: context,
+          removeBottom: true,
           child: SizedBox(
-            height: 80,
+            height: 56,
             child: BottomNavigationBar(
-              currentIndex: _currentIndex,
-              onTap: (index) => setState(() => _currentIndex = index),
+              currentIndex: navigationShell.currentIndex,
+              onTap: (index) => _onTap(context, index),
               backgroundColor: Colors.white,
               elevation: 0,
+              type: BottomNavigationBarType.fixed,
               selectedItemColor: AppColors.primary,
               unselectedItemColor: AppColors.gray400,
+              selectedFontSize: 10,
+              unselectedFontSize: 10,
               selectedLabelStyle: const TextStyle(
-                fontSize: 11,
                 fontWeight: FontWeight.w500,
+                height: 1.2,
               ),
               unselectedLabelStyle: const TextStyle(
-                fontSize: 11,
+                height: 1.2,
               ),
               items: const [
                 BottomNavigationBarItem(
-                  icon: Icon(Icons.home_outlined),
-                  activeIcon: Icon(Icons.home),
+                  icon: Icon(Icons.home_outlined, size: 24),
+                  activeIcon: Icon(Icons.home, size: 24),
                   label: '홈',
                 ),
                 BottomNavigationBarItem(
-                  icon: Icon(Icons.analytics_outlined),
-                  activeIcon: Icon(Icons.analytics),
+                  icon: Icon(Icons.analytics_outlined, size: 24),
+                  activeIcon: Icon(Icons.analytics, size: 24),
                   label: '통계',
                 ),
                 BottomNavigationBarItem(
-                  icon: Icon(Icons.person_outline),
-                  activeIcon: Icon(Icons.person),
+                  icon: Icon(Icons.person_outline, size: 24),
+                  activeIcon: Icon(Icons.person, size: 24),
                   label: '마이',
                 ),
               ],
@@ -75,8 +75,8 @@ class _MainScreenState extends State<MainScreen> {
   }
 }
 
-class _StatsPlaceholder extends StatelessWidget {
-  const _StatsPlaceholder();
+class StatsPlaceholder extends StatelessWidget {
+  const StatsPlaceholder({super.key});
 
   @override
   Widget build(BuildContext context) {

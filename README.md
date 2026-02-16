@@ -63,10 +63,24 @@ jptaku/
 flutter pub get
 ```
 
-### 환경 변수 설정
+#### 2. 앱 빌드 및 실행
 
-`.env` 파일을 생성하고 API URL을 설정하세요:
+프로젝트 루트 경로에서 아래 명령어를 실행합니다.
 
+flutter 빌드 명령어
+
+```bash
+iOS 빌드:
+flutter build ios
+
+Android 빌드:
+flutter build apk        # APK 파일
+flutter build appbundle  # Play Store용 AAB 파일
+
+
+릴리즈 빌드:
+flutter build ios --release
+flutter build apk --release
 ```
 API_URL=https://your-api-url.com
 ```

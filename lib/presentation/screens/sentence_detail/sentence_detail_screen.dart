@@ -24,6 +24,7 @@ class _SentenceDetailScreenState extends ConsumerState<SentenceDetailScreen> {
   final List<int> _selectedOrderingAnswer = [];
   bool? _fillBlankCorrect;
   bool? _orderingCorrect;
+  bool _isSubmitting = false;
 
   Map<String, bool> _progress = {
     'understand': false,
@@ -78,8 +79,11 @@ class _SentenceDetailScreenState extends ConsumerState<SentenceDetailScreen> {
   }
 
   Future<void> _handleFillBlankAnswer(String answer, Sentence sentence) async {
+    if (_isSubmitting) return;
+
     setState(() {
       _selectedFillBlankAnswer = answer;
+      _isSubmitting = true;
     });
 
     final result = await ref.read(sentenceProvider.notifier).submitQuizAnswer(
@@ -87,30 +91,52 @@ class _SentenceDetailScreenState extends ConsumerState<SentenceDetailScreen> {
           fillBlankAnswer: answer,
         );
 
-    if (result != null) {
-      setState(() {
+    setState(() {
+      _isSubmitting = false;
+      if (result != null) {
         _fillBlankCorrect = result.fillBlankCorrect;
         if (result.allCorrect) {
           _progress['confirm'] = true;
         }
-      });
-    }
+      }
+    });
   }
 
   Future<void> _handleOrderingSubmit(Sentence sentence) async {
+    if (_isSubmitting) return;
+
+    setState(() {
+      _isSubmitting = true;
+    });
+
     final result = await ref.read(sentenceProvider.notifier).submitQuizAnswer(
           sentenceId: sentence.id,
           orderingAnswer: _selectedOrderingAnswer,
         );
 
-    if (result != null) {
-      setState(() {
+    setState(() {
+      _isSubmitting = false;
+      if (result != null) {
         _orderingCorrect = result.orderingCorrect;
         if (result.allCorrect) {
           _progress['confirm'] = true;
         }
-      });
-    }
+      }
+    });
+  }
+
+  void _resetFillBlankQuiz() {
+    setState(() {
+      _selectedFillBlankAnswer = null;
+      _fillBlankCorrect = null;
+    });
+  }
+
+  void _resetOrderingQuiz() {
+    setState(() {
+      _selectedOrderingAnswer.clear();
+      _orderingCorrect = null;
+    });
   }
 
   Future<void> _updateProgress(String step, bool value) async {
@@ -368,10 +394,16 @@ class _SentenceDetailScreenState extends ConsumerState<SentenceDetailScreen> {
                   _buildStepCard(
                     number: '3',
                     title: '확인하기',
-                    description: '퀴즈로 학습을 확인해요',
+                    description: sentence.quiz != null
+                        ? '퀴즈로 학습을 확인해요'
+                        : '퀴즈가 없습니다 (탭하여 완료)',
                     isComplete: _progress['confirm']!,
                     onTap: () {
-                      setState(() => _showQuiz = true);
+                      if (sentence.quiz != null) {
+                        setState(() => _showQuiz = true);
+                      } else {
+                        _updateProgress('confirm', true);
+                      }
                     },
                   ),
 
@@ -539,7 +571,7 @@ class _SentenceDetailScreenState extends ConsumerState<SentenceDetailScreen> {
               ),
             );
           }),
-          if (_fillBlankCorrect != null)
+          if (_fillBlankCorrect != null) ...[
             Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
@@ -559,7 +591,7 @@ class _SentenceDetailScreenState extends ConsumerState<SentenceDetailScreen> {
                   ),
                   const SizedBox(width: 8),
                   Text(
-                    _fillBlankCorrect! ? '정답입니다!' : '틀렸어요. 다시 도전해보세요.',
+                    _fillBlankCorrect! ? '정답입니다!' : '틀렸어요.',
                     style: TextStyle(
                       fontSize: 14,
                       fontWeight: FontWeight.w600,
@@ -571,6 +603,17 @@ class _SentenceDetailScreenState extends ConsumerState<SentenceDetailScreen> {
                 ],
               ),
             ),
+            if (!_fillBlankCorrect!) ...[
+              const SizedBox(height: 12),
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton(
+                  onPressed: _resetFillBlankQuiz,
+                  child: const Text('다시 도전하기'),
+                ),
+              ),
+            ],
+          ],
         ],
       ),
     );
@@ -693,7 +736,7 @@ class _SentenceDetailScreenState extends ConsumerState<SentenceDetailScreen> {
                 child: const Text('정답 확인'),
               ),
             ),
-          if (_orderingCorrect != null)
+          if (_orderingCorrect != null) ...[
             Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
@@ -713,7 +756,7 @@ class _SentenceDetailScreenState extends ConsumerState<SentenceDetailScreen> {
                   ),
                   const SizedBox(width: 8),
                   Text(
-                    _orderingCorrect! ? '정답입니다!' : '틀렸어요. 다시 도전해보세요.',
+                    _orderingCorrect! ? '정답입니다!' : '틀렸어요.',
                     style: TextStyle(
                       fontSize: 14,
                       fontWeight: FontWeight.w600,
@@ -725,6 +768,17 @@ class _SentenceDetailScreenState extends ConsumerState<SentenceDetailScreen> {
                 ],
               ),
             ),
+            if (!_orderingCorrect!) ...[
+              const SizedBox(height: 12),
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton(
+                  onPressed: _resetOrderingQuiz,
+                  child: const Text('다시 도전하기'),
+                ),
+              ),
+            ],
+          ],
         ],
       ),
     );
