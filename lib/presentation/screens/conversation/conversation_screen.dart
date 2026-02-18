@@ -9,6 +9,8 @@ import '../../../core/theme/app_colors.dart';
 import '../../../data/models/sentence_model.dart';
 import '../../providers/auth_provider.dart';
 
+enum _ScenarioPhase { topicSelection, scenarioIntro, chat }
+
 /// Local UI message model
 class _UiMessage {
   final String content;
@@ -42,6 +44,10 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen> {
   int _currentTurn = 0;
   int _maxTurns = 5;
 
+  // Scenario
+  String? _scenarioTextKr;
+  _ScenarioPhase _phase = _ScenarioPhase.topicSelection;
+
   // Current suggestions (updated after each AI response)
   List<Suggestion> _currentSuggestions = [];
 
@@ -52,12 +58,12 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen> {
 
   AudioPlayer? _audioPlayer;
 
-  final List<Map<String, String>> _topicOptions = [
-    {'topic': 'cafe', 'label': '카페에서 주문하기'},
-    {'topic': 'shopping', 'label': '쇼핑할 때'},
-    {'topic': 'travel', 'label': '여행 중 질문'},
-    {'topic': 'greeting', 'label': '일상 인사'},
-    {'topic': 'anime', 'label': '애니메이션 이야기'},
+  final List<Map<String, String>> _domainOptions = [
+    {'domain': 'anime', 'label': '애니메이션', 'emoji': '🎬'},
+    {'domain': 'drama', 'label': '드라마', 'emoji': '🎭'},
+    {'domain': 'game', 'label': '게임', 'emoji': '🎮'},
+    {'domain': 'movie', 'label': '영화', 'emoji': '🎬'},
+    {'domain': 'music', 'label': '음악', 'emoji': '🎵'},
   ];
 
   @override
@@ -90,14 +96,13 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen> {
 
   // ==================== Session Creation ====================
 
-  Future<void> _startConversation(String topic, String label) async {
+  Future<void> _startConversation(String domain) async {
     setState(() => _isLoading = true);
 
     try {
       final apiService = ref.read(apiServiceProvider);
       final result = await apiService.createChatSession(
-        topic: topic,
-        topicDetail: label,
+        domain: domain,
       );
 
       if (result == null || !mounted) {
@@ -110,6 +115,8 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen> {
       _currentTurn = session.currentTurn;
       _maxTurns = session.maxTurn;
 
+      _scenarioTextKr = result.scenarioTextKr;
+
       if (result.isResumed) {
         // Resume: restore previous messages
         for (final msg in result.messages) {
@@ -120,8 +127,13 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen> {
           ));
         }
         _currentSuggestions = result.suggestions;
+        setState(() {
+          _isLoading = false;
+          _phase = _ScenarioPhase.chat;
+        });
+        _scrollToBottom();
       } else {
-        // New session: show greeting
+        // New session: add greeting to messages (shown after intro)
         final audioData = _decodeAudioBase64(result.audioBase64);
         _messages.add(_UiMessage(
           content: result.greeting,
@@ -131,13 +143,22 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen> {
         ));
         _currentSuggestions = result.suggestions;
 
-        if (audioData != null) {
-          _playAudio(audioData);
+        if (result.scenarioTextKr != null) {
+          // Show scenario intro first, play audio in background
+          setState(() {
+            _isLoading = false;
+            _phase = _ScenarioPhase.scenarioIntro;
+          });
+          if (audioData != null) _playAudio(audioData);
+        } else {
+          setState(() {
+            _isLoading = false;
+            _phase = _ScenarioPhase.chat;
+          });
+          if (audioData != null) _playAudio(audioData);
+          _scrollToBottom();
         }
       }
-
-      setState(() => _isLoading = false);
-      _scrollToBottom();
     } catch (e) {
       if (mounted) {
         setState(() => _isLoading = false);
@@ -264,6 +285,13 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen> {
     _scrollToBottom();
   }
 
+  // ==================== Scenario Intro → Chat ====================
+
+  void _startChat() {
+    setState(() => _phase = _ScenarioPhase.chat);
+    WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToBottom());
+  }
+
   // ==================== End Session ====================
 
   Future<void> _endConversation() async {
@@ -314,33 +342,103 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen> {
           icon: const Icon(Icons.close),
           onPressed: () => context.pop(),
         ),
-        title: _session != null
-            ? Column(
-                children: [
-                  const Text(
-                    'AI 회화',
-                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                  ),
-                  Text(
-                    '$_currentTurn / $_maxTurns 턴',
-                    style: const TextStyle(
-                        fontSize: 12, color: AppColors.gray500),
-                  ),
-                ],
-              )
-            : const Text(
-                'AI 회화',
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-              ),
+        title: _buildAppBarTitle(),
         actions: [
-          if (_session != null && _messages.length > 1)
+          if (_phase == _ScenarioPhase.chat && _session != null && _messages.length > 1)
             TextButton(
               onPressed: _endConversation,
               child: const Text('종료'),
             ),
         ],
       ),
-      body: _session == null ? _buildTopicSelection() : _buildChatView(),
+      body: AnimatedSwitcher(
+        duration: const Duration(milliseconds: 500),
+        transitionBuilder: (child, animation) {
+          return FadeTransition(
+            opacity: animation,
+            child: SlideTransition(
+              position: Tween<Offset>(
+                begin: const Offset(0, 0.04),
+                end: Offset.zero,
+              ).animate(CurvedAnimation(parent: animation, curve: Curves.easeOut)),
+              child: child,
+            ),
+          );
+        },
+        child: switch (_phase) {
+          _ScenarioPhase.topicSelection =>
+            KeyedSubtree(key: const ValueKey('topic'), child: _buildTopicSelection()),
+          _ScenarioPhase.scenarioIntro =>
+            KeyedSubtree(key: const ValueKey('scenario'), child: _buildScenarioIntro()),
+          _ScenarioPhase.chat =>
+            KeyedSubtree(key: const ValueKey('chat'), child: _buildChatView()),
+        },
+      ),
+    );
+  }
+
+  Widget _buildAppBarTitle() {
+    if (_phase == _ScenarioPhase.topicSelection || _session == null) {
+      return const Text('AI 회화', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold));
+    }
+    if (_phase == _ScenarioPhase.scenarioIntro) {
+      return Column(
+        children: [
+          Text(
+            '${_session!.domainEmoji} ${_session!.domainLabel}',
+            style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+          ),
+          const Text('오늘의 시나리오', style: TextStyle(fontSize: 12, color: AppColors.gray500)),
+        ],
+      );
+    }
+    // chat phase
+    return Column(
+      children: [
+        Text(
+          _session!.personaNameJp != null
+              ? '${_session!.domainEmoji} ${_session!.personaNameJp}'
+              : 'AI 회화',
+          style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+        ),
+        Text(
+          _session!.contentTitle != null
+              ? '${_session!.contentTitle} · $_currentTurn/$_maxTurns턴'
+              : '$_currentTurn / $_maxTurns 턴',
+          style: const TextStyle(fontSize: 12, color: AppColors.gray500),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildScenarioBanner() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+      decoration: BoxDecoration(
+        color: AppColors.primaryLight,
+        border: Border(
+          bottom: BorderSide(color: AppColors.primary.withValues(alpha: 0.15)),
+        ),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.auto_stories, size: 13, color: AppColors.primary),
+          const SizedBox(width: 6),
+          Expanded(
+            child: Text(
+              _scenarioTextKr!,
+              style: const TextStyle(
+                fontSize: 12,
+                color: AppColors.gray700,
+                height: 1.3,
+              ),
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -353,66 +451,175 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const Text(
-            '대화 주제를 선택하세요',
+            '오늘은 어떤 주제로\n이야기할까요?',
             style: TextStyle(
               fontSize: 24,
               fontWeight: FontWeight.bold,
               color: AppColors.gray900,
+              height: 1.3,
             ),
           ),
           const SizedBox(height: 8),
           const Text(
-            'AI와 선택한 주제로 일본어 대화를 연습해보세요',
+            'AI 캐릭터와 일본어로 대화를 연습해보세요',
             style: TextStyle(fontSize: 16, color: AppColors.gray500),
           ),
           const SizedBox(height: 32),
           if (_isLoading)
             const Center(child: CircularProgressIndicator())
           else
-            ..._topicOptions.map((t) => _buildTopicCard(
-                  topic: t['topic']!,
-                  label: t['label']!,
-                )),
+            GridView.count(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              crossAxisCount: 2,
+              mainAxisSpacing: 12,
+              crossAxisSpacing: 12,
+              childAspectRatio: 1.4,
+              children: _domainOptions.map((d) => _buildDomainCard(
+                    domain: d['domain']!,
+                    label: d['label']!,
+                    emoji: d['emoji']!,
+                  )).toList(),
+            ),
         ],
       ),
     );
   }
 
-  Widget _buildTopicCard({required String topic, required String label}) {
+  Widget _buildDomainCard({
+    required String domain,
+    required String label,
+    required String emoji,
+  }) {
     return GestureDetector(
-      onTap: () => _startConversation(topic, label),
+      onTap: () => _startConversation(domain),
       child: Container(
-        margin: const EdgeInsets.only(bottom: 12),
-        padding: const EdgeInsets.all(20),
+        padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
           color: Colors.white,
           borderRadius: BorderRadius.circular(16),
           border: Border.all(color: AppColors.gray100),
-        ),
-        child: Row(
-          children: [
-            Container(
-              width: 48,
-              height: 48,
-              decoration: BoxDecoration(
-                color: AppColors.primaryLight,
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: const Icon(Icons.chat_bubble_outline,
-                  color: AppColors.primary),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.04),
+              blurRadius: 8,
+              offset: const Offset(0, 2),
             ),
-            const SizedBox(width: 16),
-            Expanded(
-              child: Text(label,
-                  style: const TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w600,
-                      color: AppColors.gray900)),
-            ),
-            const Icon(Icons.arrow_forward_ios,
-                size: 16, color: AppColors.gray400),
           ],
         ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Text(emoji, style: const TextStyle(fontSize: 28)),
+            const SizedBox(height: 8),
+            Text(
+              label,
+              style: const TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w600,
+                color: AppColors.gray900,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ==================== Scenario Intro View ====================
+
+  Widget _buildScenarioIntro() {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          Text(
+            _session?.domainEmoji ?? '💬',
+            style: const TextStyle(fontSize: 56),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            _session?.contentTitle ?? _session?.domainLabel ?? '',
+            style: const TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.w600,
+              color: AppColors.gray900,
+            ),
+          ),
+          const SizedBox(height: 32),
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(16),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.06),
+                  blurRadius: 12,
+                  offset: const Offset(0, 4),
+                ),
+              ],
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: AppColors.primaryLight,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.auto_stories, size: 12, color: AppColors.primary),
+                      SizedBox(width: 4),
+                      Text(
+                        '오늘의 시나리오',
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: AppColors.primary,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  _scenarioTextKr ?? '',
+                  style: const TextStyle(
+                    fontSize: 16,
+                    color: AppColors.gray900,
+                    height: 1.7,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 32),
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton(
+              onPressed: _startChat,
+              style: ElevatedButton.styleFrom(
+                padding: const EdgeInsets.symmetric(vertical: 16),
+              ),
+              child: const Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Text('대화 시작하기',
+                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
+                  SizedBox(width: 8),
+                  Icon(Icons.arrow_forward, size: 18),
+                ],
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -422,6 +629,9 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen> {
   Widget _buildChatView() {
     return Column(
       children: [
+        // Scenario banner
+        if (_scenarioTextKr != null) _buildScenarioBanner(),
+
         // Progress bar
         LinearProgressIndicator(
           value: _maxTurns > 0 ? _currentTurn / _maxTurns : 0,
@@ -538,20 +748,33 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           // AI avatar
-          Container(
-            width: 36,
-            height: 36,
-            decoration: BoxDecoration(
-              color: AppColors.primary,
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: const Center(
-              child: Text('AI',
-                  style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.white)),
-            ),
+          Column(
+            children: [
+              Container(
+                width: 36,
+                height: 36,
+                decoration: BoxDecoration(
+                  color: AppColors.primary,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Center(
+                  child: Text(
+                    _session?.personaNameJp?.substring(0, 1) ?? 'AI',
+                    style: const TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white),
+                  ),
+                ),
+              ),
+              if (_session?.personaNameKr != null) ...[
+                const SizedBox(height: 2),
+                Text(
+                  _session!.personaNameKr!,
+                  style: const TextStyle(fontSize: 9, color: AppColors.gray500),
+                ),
+              ],
+            ],
           ),
           const SizedBox(width: 8),
           Flexible(

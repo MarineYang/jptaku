@@ -369,13 +369,11 @@ class ApiService {
 
   /// Create chat session
   Future<CreateSessionResponse?> createChatSession({
-    required String topic,
-    String? topicDetail,
+    required String domain,
   }) async {
     try {
       final response = await _dio.post('/api/chat/session', data: {
-        'topic': topic,
-        if (topicDetail != null) 'topic_detail': topicDetail,
+        'domain': domain,
       });
       final data = _extractData(response);
       return CreateSessionResponse.fromJson(data);

@@ -64,14 +64,7 @@ class UserOnboarding {
     );
   }
 
-  String get levelName {
-    switch (level) {
-      case 3: return 'N3';
-      case 4: return 'N4';
-      case 5: return 'N5';
-      default: return 'N$level';
-    }
-  }
+  String get levelName => 'N$level';
 
   List<String> get categoryNames {
     const categoryMap = {

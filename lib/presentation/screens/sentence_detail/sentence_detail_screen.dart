@@ -199,8 +199,12 @@ class _SentenceDetailScreenState extends ConsumerState<SentenceDetailScreen> {
                       children: [
                         Text(
                           sentence.jp,
-                          style: const TextStyle(
-                            fontSize: 24,
+                          style: TextStyle(
+                            fontSize: sentence.jp.length > 30
+                                ? 18.0
+                                : sentence.jp.length > 20
+                                    ? 20.0
+                                    : 24.0,
                             fontWeight: FontWeight.bold,
                             color: AppColors.gray900,
                           ),

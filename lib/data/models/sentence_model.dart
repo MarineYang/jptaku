@@ -166,18 +166,7 @@ class Sentence {
     );
   }
 
-  String get levelName {
-    switch (level) {
-      case 3:
-        return 'N3';
-      case 4:
-        return 'N4';
-      case 5:
-        return 'N5';
-      default:
-        return 'N$level';
-    }
-  }
+  String get levelName => 'N$level';
 
   String get categoryName {
     switch (category) {
@@ -306,18 +295,7 @@ class FlashSentence {
     );
   }
 
-  String get levelName {
-    switch (level) {
-      case 3:
-        return 'N3';
-      case 4:
-        return 'N4';
-      case 5:
-        return 'N5';
-      default:
-        return 'N$level';
-    }
-  }
+  String get levelName => 'N$level';
 
   String get categoryName {
     switch (category) {
@@ -492,6 +470,11 @@ class ChatSession {
   final int id;
   final String topic;
   final String? topicDetail;
+  final String? domain;
+  final String? personaName;
+  final String? personaGender;
+  final String? contentId;
+  final String? contentTitle;
   final int currentTurn;
   final int maxTurn;
   final String status;
@@ -503,6 +486,11 @@ class ChatSession {
     required this.id,
     required this.topic,
     this.topicDetail,
+    this.domain,
+    this.personaName,
+    this.personaGender,
+    this.contentId,
+    this.contentTitle,
     this.currentTurn = 0,
     this.maxTurn = 5,
     this.status = 'active',
@@ -516,6 +504,11 @@ class ChatSession {
       id: json['id'] ?? 0,
       topic: json['topic'] ?? '',
       topicDetail: json['topic_detail'],
+      domain: json['domain'],
+      personaName: json['persona_name'],
+      personaGender: json['persona_gender'],
+      contentId: json['content_id'],
+      contentTitle: json['content_title'],
       currentTurn: json['current_turn'] ?? 0,
       maxTurn: json['max_turn'] ?? 5,
       status: json['status'] ?? 'active',
@@ -532,12 +525,49 @@ class ChatSession {
   }
 
   bool get isActive => status == 'active';
+
+  /// "健太(켄타)" → "健太"
+  String? get personaNameJp {
+    if (personaName == null) return null;
+    final idx = personaName!.indexOf('(');
+    return idx > 0 ? personaName!.substring(0, idx) : personaName;
+  }
+
+  /// "健太(켄타)" → "켄타"
+  String? get personaNameKr {
+    if (personaName == null) return null;
+    final match = RegExp(r'\((.+)\)').firstMatch(personaName!);
+    return match?.group(1);
+  }
+
+  String get domainLabel {
+    switch (domain) {
+      case 'anime': return '애니메이션';
+      case 'drama': return '드라마';
+      case 'game': return '게임';
+      case 'movie': return '영화';
+      case 'music': return '음악';
+      default: return domain ?? '대화';
+    }
+  }
+
+  String get domainEmoji {
+    switch (domain) {
+      case 'anime': return '🎬';
+      case 'drama': return '🎭';
+      case 'game': return '🎮';
+      case 'movie': return '🎬';
+      case 'music': return '🎵';
+      default: return '💬';
+    }
+  }
 }
 
 class CreateSessionResponse {
   final ChatSession session;
   final String greeting;
   final String? greetingKr;
+  final String? scenarioTextKr;
   final List<Suggestion> suggestions;
   final String? audioBase64;
   final bool isResumed;
@@ -547,6 +577,7 @@ class CreateSessionResponse {
     required this.session,
     required this.greeting,
     this.greetingKr,
+    this.scenarioTextKr,
     this.suggestions = const [],
     this.audioBase64,
     this.isResumed = false,
@@ -558,6 +589,7 @@ class CreateSessionResponse {
       session: ChatSession.fromJson(json['session'] ?? json),
       greeting: json['greeting'] ?? '',
       greetingKr: json['greeting_kr'],
+      scenarioTextKr: json['scenario_text_kr'] as String?,
       suggestions: (json['suggestions'] as List<dynamic>?)
               ?.map((s) => Suggestion.fromJson(s as Map<String, dynamic>))
               .toList() ??

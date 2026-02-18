@@ -283,12 +283,18 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
   }
 
   Widget _buildDailySentencesSection(dynamic sentenceState, dynamic stats) {
-    final completedCount = stats?.sentencesLearned ?? 0;
-    final totalCount = 5;
+    final newSentences = sentenceState.newSentences as List<Sentence>;
+    final reviewSentences = sentenceState.reviewSentences as List<Sentence>;
+    final totalCount = sentenceState.todaySentences.length as int;
+    final memorizedCount = sentenceState.todaySentences
+        .where((s) => s.memorized || (sentenceState.progressMap[s.id]?.memorized ?? false))
+        .length;
+    final allDone = sentenceState.allMemorized as bool;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        // Header
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 24),
           child: Row(
@@ -306,7 +312,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
                   ),
                   const SizedBox(width: 10),
                   const Text(
-                    '오늘의 5문장',
+                    '오늘의 문장',
                     style: TextStyle(
                       fontSize: 20,
                       fontWeight: FontWeight.bold,
@@ -321,35 +327,24 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
                   vertical: 6,
                 ),
                 decoration: BoxDecoration(
-                  color: completedCount >= totalCount
-                      ? AppColors.successLight
-                      : AppColors.primaryLight,
+                  color: allDone ? AppColors.successLight : AppColors.primaryLight,
                   borderRadius: BorderRadius.circular(AppTheme.radiusRound),
                 ),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    if (completedCount >= totalCount)
-                      const Icon(
-                        Icons.check_circle,
-                        size: 14,
-                        color: AppColors.success,
-                      )
-                    else
-                      const Icon(
-                        Icons.pending,
-                        size: 14,
-                        color: AppColors.primary,
-                      ),
+                    Icon(
+                      allDone ? Icons.check_circle : Icons.pending,
+                      size: 14,
+                      color: allDone ? AppColors.success : AppColors.primary,
+                    ),
                     const SizedBox(width: 4),
                     Text(
-                      '$completedCount/$totalCount',
+                      '$memorizedCount/$totalCount',
                       style: TextStyle(
                         fontSize: 14,
                         fontWeight: FontWeight.bold,
-                        color: completedCount >= totalCount
-                            ? AppColors.success
-                            : AppColors.primary,
+                        color: allDone ? AppColors.success : AppColors.primary,
                       ),
                     ),
                   ],
@@ -362,11 +357,32 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 24),
           child: LearningProgressBar(
-            completed: completedCount,
-            total: totalCount,
+            completed: memorizedCount,
+            total: totalCount > 0 ? totalCount : 5,
             activeColor: AppColors.sakura,
           ),
         ),
+        if (allDone) ...[
+          const SizedBox(height: 12),
+          const Padding(
+            padding: EdgeInsets.symmetric(horizontal: 24),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(Icons.celebration, color: AppColors.warning, size: 20),
+                SizedBox(width: 8),
+                Text(
+                  '오늘 학습 완료!',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                    color: AppColors.success,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
         const SizedBox(height: 16),
         if (sentenceState.isLoading)
           const Center(
@@ -379,29 +395,96 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
           )
         else if (sentenceState.todaySentences.isEmpty)
           _buildEmptyState()
-        else
-          ListView.builder(
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            padding: const EdgeInsets.symmetric(horizontal: 24),
-            itemCount: sentenceState.todaySentences.length,
-            itemBuilder: (context, index) {
-              final sentence = sentenceState.todaySentences[index];
-              final progress = sentenceState.progressMap[sentence.id];
-              final isCompleted = progress?.memorized ?? false;
+        else ...[
+          // New sentences section
+          if (newSentences.isNotEmpty) ...[
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 24),
+              child: Row(
+                children: [
+                  const Icon(Icons.menu_book, size: 16, color: AppColors.primary),
+                  const SizedBox(width: 6),
+                  Text(
+                    '새 문장 (${newSentences.length}개)',
+                    style: const TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.primary,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 8),
+            ListView.builder(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              padding: const EdgeInsets.symmetric(horizontal: 24),
+              itemCount: newSentences.length,
+              itemBuilder: (context, index) {
+                final sentence = newSentences[index];
+                final progress = sentenceState.progressMap[sentence.id];
+                final isCompleted = progress?.memorized ?? false;
 
-              return _buildSentenceCard(
-                context: context,
-                index: index,
-                sentence: sentence,
-                isCompleted: isCompleted,
-                onTap: () {
-                  ref.read(sentenceProvider.notifier).setCurrentSentence(sentence);
-                  context.push('/sentence/${sentence.id}');
-                },
-              );
-            },
-          ),
+                return _buildSentenceCard(
+                  context: context,
+                  index: index,
+                  sentence: sentence,
+                  isCompleted: isCompleted,
+                  onTap: () {
+                    ref.read(sentenceProvider.notifier).setCurrentSentence(sentence);
+                    context.push('/sentence/${sentence.id}');
+                  },
+                );
+              },
+            ),
+          ],
+          // Review sentences section
+          if (reviewSentences.isNotEmpty) ...[
+            const SizedBox(height: 20),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 24),
+              child: Row(
+                children: [
+                  const Icon(Icons.refresh, size: 16, color: AppColors.warning),
+                  const SizedBox(width: 6),
+                  Text(
+                    '복습 문장 (${reviewSentences.length}개)',
+                    style: const TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.warning,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 8),
+            ListView.builder(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              padding: const EdgeInsets.symmetric(horizontal: 24),
+              itemCount: reviewSentences.length,
+              itemBuilder: (context, index) {
+                final sentence = reviewSentences[index];
+                final progress = sentenceState.progressMap[sentence.id];
+                final isCompleted = progress?.memorized ?? false;
+
+                return _buildSentenceCard(
+                  context: context,
+                  index: newSentences.length + index,
+                  sentence: sentence,
+                  isCompleted: isCompleted,
+                  isReview: true,
+                  onTap: () {
+                    ref.read(sentenceProvider.notifier).setCurrentSentence(sentence);
+                    context.push('/sentence/${sentence.id}');
+                  },
+                );
+              },
+            ),
+          ],
+        ],
       ],
     );
   }
@@ -447,14 +530,26 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
     required Sentence sentence,
     required bool isCompleted,
     required VoidCallback onTap,
+    bool isReview = false,
   }) {
+    // Dynamic font size based on sentence length
+    final jpFontSize = sentence.jp.length > 30
+        ? 14.0
+        : sentence.jp.length > 20
+            ? 16.0
+            : 18.0;
+
     return AnimatedCard(
       onTap: onTap,
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(16),
       border: Border.all(
-        color: isCompleted ? AppColors.success : AppColors.gray100,
-        width: isCompleted ? 2 : 1,
+        color: isCompleted
+            ? AppColors.success
+            : isReview
+                ? AppColors.warning.withValues(alpha: 0.4)
+                : AppColors.gray100,
+        width: isCompleted || isReview ? 2 : 1,
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -472,7 +567,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
                 Text(
                   sentence.jp,
                   style: TextStyle(
-                    fontSize: 18,
+                    fontSize: jpFontSize,
                     fontWeight: FontWeight.w600,
                     color: isCompleted ? AppColors.gray400 : AppColors.gray900,
                     decoration: isCompleted ? TextDecoration.lineThrough : null,

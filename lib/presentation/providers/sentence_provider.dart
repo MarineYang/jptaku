@@ -18,7 +18,15 @@ class SentenceState {
   });
 
   List<Sentence> get todaySentences => todayData?.sentences ?? [];
+  List<Sentence> get newSentences =>
+      todaySentences.where((s) => !s.memorized).toList();
+  List<Sentence> get reviewSentences =>
+      todaySentences.where((s) => s.memorized).toList();
   int get dailySetId => todayData?.dailySetId ?? 0;
+  bool get allMemorized =>
+      todaySentences.isNotEmpty &&
+      todaySentences.every((s) =>
+          s.memorized || (progressMap[s.id]?.memorized ?? false));
 
   SentenceState copyWith({
     bool? isLoading,
