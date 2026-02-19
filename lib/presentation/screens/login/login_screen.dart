@@ -16,6 +16,28 @@ class LoginScreen extends ConsumerStatefulWidget {
 class _LoginScreenState extends ConsumerState<LoginScreen> {
   bool _isLoading = false;
 
+  Future<void> _handleGuestLogin() async {
+    setState(() => _isLoading = true);
+    try {
+      final success = await ref.read(authProvider.notifier).guestLogin();
+      if (success && mounted) {
+        context.go('/home');
+      } else if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('비회원 로그인에 실패했습니다. 다시 시도해주세요.')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('오류: ${e.toString()}')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
   Future<void> _handleGoogleLogin() async {
     setState(() => _isLoading = true);
 
@@ -199,7 +221,37 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                             ),
                     ),
                   ),
-                  const SizedBox(height: 16),
+                  const SizedBox(height: 12),
+                  SizedBox(
+                    width: double.infinity,
+                    height: 56,
+                    child: TextButton(
+                      onPressed: _isLoading ? null : _handleGuestLogin,
+                      style: TextButton.styleFrom(
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                      child: _isLoading
+                          ? const SizedBox(
+                              width: 20,
+                              height: 20,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: AppColors.gray400,
+                              ),
+                            )
+                          : const Text(
+                              '비회원으로 시작하기',
+                              style: TextStyle(
+                                fontSize: 15,
+                                color: AppColors.gray500,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
                   const Text(
                     '로그인 시 서비스 이용약관에 동의하게 됩니다.',
                     style: TextStyle(

@@ -553,6 +553,135 @@ class ApiService {
     }
   }
 
+  // ==================== Guest ====================
+
+  /// Issue guest token
+  Future<String?> guestLogin() async {
+    try {
+      final response = await _dio.post('/api/auth/guest');
+      final data = _extractData(response);
+      return data['access_token'] as String?;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  /// Start guest chat session
+  Future<GuestChatStartResponse?> startGuestChat({
+    required String domain,
+  }) async {
+    try {
+      final response = await _dio.post('/api/chat/guest/start', data: {
+        'domain': domain,
+      });
+      final data = _extractData(response);
+      return GuestChatStartResponse.fromJson(data);
+    } catch (e) {
+      print('startGuestChat error: $e');
+      return null;
+    }
+  }
+
+  /// Send guest message with SSE streaming
+  Stream<ChatStreamEvent> sendGuestMessageStream({
+    required String domain,
+    required String contentTitle,
+    required String personaName,
+    required String? personaGender,
+    required List<Map<String, String>> messages,
+    required String message,
+    required int currentTurn,
+    required int maxTurn,
+  }) async* {
+    try {
+      final token = await _storage.read(key: AppConstants.accessTokenKey);
+
+      final response = await _dio.post(
+        '/api/chat/guest/message',
+        data: {
+          'domain': domain,
+          'content_title': contentTitle,
+          'persona_name': personaName,
+          if (personaGender != null) 'persona_gender': personaGender,
+          'messages': messages,
+          'message': message,
+          'current_turn': currentTurn,
+          'max_turn': maxTurn,
+        },
+        options: Options(
+          responseType: ResponseType.stream,
+          headers: {
+            'Accept': 'text/event-stream',
+            if (token != null) 'Authorization': 'Bearer $token',
+          },
+        ),
+      );
+
+      final stream = response.data.stream as Stream<List<int>>;
+      String buffer = '';
+
+      await for (final chunk in stream) {
+        final decoded = utf8.decode(chunk);
+        buffer += decoded;
+        buffer = buffer.replaceAll('\r\n', '\n');
+
+        while (buffer.contains('\n\n')) {
+          final index = buffer.indexOf('\n\n');
+          final eventData = buffer.substring(0, index);
+          buffer = buffer.substring(index + 2);
+
+          final dataLines = <String>[];
+          for (final line in eventData.split('\n')) {
+            if (line.startsWith('data: ')) {
+              dataLines.add(line.substring(6));
+            } else if (line.startsWith('data:')) {
+              dataLines.add(line.substring(5));
+            }
+          }
+
+          if (dataLines.isEmpty) continue;
+          final dataLine = dataLines.join('\n');
+          if (dataLine.isEmpty || dataLine == 'connection closed') continue;
+
+          try {
+            final jsonData = json.decode(dataLine) as Map<String, dynamic>;
+            yield ChatStreamEvent.fromJson(jsonData);
+          } catch (e) {
+            print('[GuestSSE] Parse error: $e, raw: $dataLine');
+          }
+        }
+      }
+    } catch (e) {
+      print('[GuestSSE] stream exception: $e');
+      yield ChatStreamEvent(
+        type: ChatStreamEventType.error,
+        content: e.toString(),
+      );
+    }
+  }
+
+  /// Get guest today's sentences
+  Future<DailySentencesResponse?> getGuestSentences() async {
+    try {
+      final response = await _dio.get('/api/sentences/guest');
+      final data = _extractData(response);
+      return DailySentencesResponse.fromJson(data);
+    } catch (e) {
+      return null;
+    }
+  }
+
+  /// Get guest flash sentences
+  Future<TodayFlashResponse?> getGuestFlash() async {
+    try {
+      final response = await _dio.get('/api/flash/guest');
+      final data = _extractData(response);
+      return TodayFlashResponse.fromJson(data);
+    } catch (e) {
+      return null;
+    }
+  }
+
   // ==================== Audio ====================
 
   /// Get audio URL

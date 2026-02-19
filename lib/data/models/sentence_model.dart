@@ -604,6 +604,81 @@ class CreateSessionResponse {
   }
 }
 
+// ==================== Guest Chat ====================
+
+class GuestChatStartResponse {
+  final String domain;
+  final String contentTitle;
+  final String personaName;
+  final String? personaGender;
+  final String greeting;
+  final String? greetingKr;
+  final String? scenarioTextKr;
+  final List<Suggestion> suggestions;
+  final int maxTurn;
+
+  GuestChatStartResponse({
+    required this.domain,
+    required this.contentTitle,
+    required this.personaName,
+    this.personaGender,
+    required this.greeting,
+    this.greetingKr,
+    this.scenarioTextKr,
+    this.suggestions = const [],
+    this.maxTurn = 10,
+  });
+
+  factory GuestChatStartResponse.fromJson(Map<String, dynamic> json) {
+    return GuestChatStartResponse(
+      domain: json['domain'] ?? '',
+      contentTitle: json['content_title'] ?? '',
+      personaName: json['persona_name'] ?? '',
+      personaGender: json['persona_gender'],
+      greeting: json['greeting'] ?? '',
+      greetingKr: json['greeting_kr'],
+      scenarioTextKr: json['scenario_text_kr'],
+      suggestions: (json['suggestions'] as List<dynamic>?)
+              ?.map((s) => Suggestion.fromJson(s as Map<String, dynamic>))
+              .toList() ??
+          [],
+      maxTurn: json['max_turn'] ?? 10,
+    );
+  }
+
+  String get personaNameJp {
+    final idx = personaName.indexOf('(');
+    return idx > 0 ? personaName.substring(0, idx) : personaName;
+  }
+
+  String get personaNameKr {
+    final match = RegExp(r'\((.+)\)').firstMatch(personaName);
+    return match?.group(1) ?? '';
+  }
+
+  String get domainEmoji {
+    switch (domain) {
+      case 'anime': return '🎬';
+      case 'drama': return '🎭';
+      case 'game': return '🎮';
+      case 'movie': return '🎬';
+      case 'music': return '🎵';
+      default: return '💬';
+    }
+  }
+
+  String get domainLabel {
+    switch (domain) {
+      case 'anime': return '애니메이션';
+      case 'drama': return '드라마';
+      case 'game': return '게임';
+      case 'movie': return '영화';
+      case 'music': return '음악';
+      default: return '대화';
+    }
+  }
+}
+
 // ==================== Feedback ====================
 class Feedback {
   final int sessionId;

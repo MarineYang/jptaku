@@ -7,6 +7,7 @@ class AppConstants {
   static const String refreshTokenKey = 'refresh_token';
   static const String isOnboardedKey = 'is_onboarded';
   static const String userDataKey = 'user_data';
+  static const String isGuestKey = 'is_guest';
 
   // Category codes
   static const Map<int, String> categoryNames = {

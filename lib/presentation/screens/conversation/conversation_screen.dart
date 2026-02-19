@@ -48,6 +48,10 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen> {
   String? _scenarioTextKr;
   _ScenarioPhase _phase = _ScenarioPhase.topicSelection;
 
+  // Guest mode
+  GuestChatStartResponse? _guestSession;
+  final List<Map<String, String>> _guestHistory = [];
+
   // Current suggestions (updated after each AI response)
   List<Suggestion> _currentSuggestions = [];
 
@@ -97,13 +101,67 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen> {
   // ==================== Session Creation ====================
 
   Future<void> _startConversation(String domain) async {
+    final isGuest = ref.read(authProvider).isGuest;
+    if (isGuest) {
+      await _startGuestConversation(domain);
+    } else {
+      await _startAuthConversation(domain);
+    }
+  }
+
+  Future<void> _startGuestConversation(String domain) async {
+    setState(() => _isLoading = true);
+    try {
+      final apiService = ref.read(apiServiceProvider);
+      final result = await apiService.startGuestChat(domain: domain);
+
+      if (result == null || !mounted) {
+        setState(() => _isLoading = false);
+        return;
+      }
+
+      _guestSession = result;
+      _currentTurn = 0;
+      _maxTurns = result.maxTurn;
+      _scenarioTextKr = result.scenarioTextKr;
+
+      // Add greeting to UI and guest history
+      _messages.add(_UiMessage(
+        content: result.greeting,
+        contentKr: result.greetingKr,
+        isUser: false,
+      ));
+      _guestHistory.add({'role': 'assistant', 'content': result.greeting});
+      _currentSuggestions = result.suggestions;
+
+      if (result.scenarioTextKr != null) {
+        setState(() {
+          _isLoading = false;
+          _phase = _ScenarioPhase.scenarioIntro;
+        });
+      } else {
+        setState(() {
+          _isLoading = false;
+          _phase = _ScenarioPhase.chat;
+        });
+        _scrollToBottom();
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _isLoading = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('세션 생성에 실패했습니다.')),
+        );
+      }
+    }
+  }
+
+  Future<void> _startAuthConversation(String domain) async {
     setState(() => _isLoading = true);
 
     try {
       final apiService = ref.read(apiServiceProvider);
-      final result = await apiService.createChatSession(
-        domain: domain,
-      );
+      final result = await apiService.createChatSession(domain: domain);
 
       if (result == null || !mounted) {
         setState(() => _isLoading = false);
@@ -114,11 +172,9 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen> {
       _session = session;
       _currentTurn = session.currentTurn;
       _maxTurns = session.maxTurn;
-
       _scenarioTextKr = result.scenarioTextKr;
 
       if (result.isResumed) {
-        // Resume: restore previous messages
         for (final msg in result.messages) {
           _messages.add(_UiMessage(
             content: msg.content,
@@ -133,7 +189,6 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen> {
         });
         _scrollToBottom();
       } else {
-        // New session: add greeting to messages (shown after intro)
         final audioData = _decodeAudioBase64(result.audioBase64);
         _messages.add(_UiMessage(
           content: result.greeting,
@@ -144,7 +199,6 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen> {
         _currentSuggestions = result.suggestions;
 
         if (result.scenarioTextKr != null) {
-          // Show scenario intro first, play audio in background
           setState(() {
             _isLoading = false;
             _phase = _ScenarioPhase.scenarioIntro;
@@ -174,7 +228,9 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen> {
   Future<void> _sendMessage([String? overrideText]) async {
     final text = overrideText ?? _controller.text.trim();
     if (text.isEmpty || _isLoading || _isStreaming || _isCompleted) return;
-    if (_session == null) return;
+    final isGuest = ref.read(authProvider).isGuest;
+    if (!isGuest && _session == null) return;
+    if (isGuest && _guestSession == null) return;
 
     setState(() {
       _messages.add(_UiMessage(content: text, isUser: true));
@@ -189,12 +245,28 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen> {
 
     try {
       final apiService = ref.read(apiServiceProvider);
-      final stream = apiService.sendMessageStream(
-        sessionId: _session!.id,
-        message: text,
-      );
+      final isGuest = ref.read(authProvider).isGuest;
 
-      print('[Chat] SSE stream started for session ${_session!.id}');
+      // Guest: add user message to history before sending
+      if (isGuest) {
+        _guestHistory.add({'role': 'user', 'content': text});
+      }
+
+      final stream = isGuest
+          ? apiService.sendGuestMessageStream(
+              domain: _guestSession!.domain,
+              contentTitle: _guestSession!.contentTitle,
+              personaName: _guestSession!.personaName,
+              personaGender: _guestSession!.personaGender,
+              messages: List.from(_guestHistory)..removeLast(), // history before current message
+              message: text,
+              currentTurn: _currentTurn,
+              maxTurn: _maxTurns,
+            )
+          : apiService.sendMessageStream(
+              sessionId: _session!.id,
+              message: text,
+            );
       await for (final event in stream) {
         if (!mounted) break;
 
@@ -256,9 +328,14 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen> {
 
       // Finalize AI message
       if (_streamingText.isNotEmpty && mounted) {
+        final finalText = _streamingText;
+        // Guest: add AI response to history
+        if (ref.read(authProvider).isGuest) {
+          _guestHistory.add({'role': 'assistant', 'content': finalText});
+        }
         setState(() {
           _messages.add(_UiMessage(
-            content: _streamingText,
+            content: finalText,
             contentKr: _streamingTranslation,
             isUser: false,
             audioData: _streamingAudio,
@@ -295,6 +372,14 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen> {
   // ==================== End Session ====================
 
   Future<void> _endConversation() async {
+    final isGuest = ref.read(authProvider).isGuest;
+
+    // Guest: no feedback, just go home
+    if (isGuest) {
+      context.go('/home');
+      return;
+    }
+
     if (_session == null) {
       context.go('/home');
       return;
@@ -344,7 +429,7 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen> {
         ),
         title: _buildAppBarTitle(),
         actions: [
-          if (_phase == _ScenarioPhase.chat && _session != null && _messages.length > 1)
+          if (_phase == _ScenarioPhase.chat && (_session != null || _guestSession != null) && _messages.length > 1)
             TextButton(
               onPressed: _endConversation,
               child: const Text('종료'),
@@ -378,21 +463,38 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen> {
   }
 
   Widget _buildAppBarTitle() {
-    if (_phase == _ScenarioPhase.topicSelection || _session == null) {
+    if (_phase == _ScenarioPhase.topicSelection || (_session == null && _guestSession == null)) {
       return const Text('AI 회화', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold));
     }
     if (_phase == _ScenarioPhase.scenarioIntro) {
+      final emoji = _guestSession?.domainEmoji ?? _session?.domainEmoji ?? '💬';
+      final label = _guestSession?.domainLabel ?? _session?.domainLabel ?? '';
       return Column(
         children: [
           Text(
-            '${_session!.domainEmoji} ${_session!.domainLabel}',
+            '$emoji $label',
             style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
           ),
           const Text('오늘의 시나리오', style: TextStyle(fontSize: 12, color: AppColors.gray500)),
         ],
       );
     }
-    // chat phase
+    // chat phase - guest
+    if (_guestSession != null) {
+      return Column(
+        children: [
+          Text(
+            '${_guestSession!.domainEmoji} ${_guestSession!.personaNameJp}',
+            style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+          ),
+          Text(
+            '${_guestSession!.contentTitle} · $_currentTurn/$_maxTurns턴',
+            style: const TextStyle(fontSize: 12, color: AppColors.gray500),
+          ),
+        ],
+      );
+    }
+    // chat phase - auth
     return Column(
       children: [
         Text(
@@ -536,12 +638,12 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen> {
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           Text(
-            _session?.domainEmoji ?? '💬',
+            _guestSession?.domainEmoji ?? _session?.domainEmoji ?? '💬',
             style: const TextStyle(fontSize: 56),
           ),
           const SizedBox(height: 8),
           Text(
-            _session?.contentTitle ?? _session?.domainLabel ?? '',
+            _guestSession?.contentTitle ?? _guestSession?.domainLabel ?? _session?.contentTitle ?? _session?.domainLabel ?? '',
             style: const TextStyle(
               fontSize: 18,
               fontWeight: FontWeight.w600,
@@ -759,7 +861,7 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen> {
                 ),
                 child: Center(
                   child: Text(
-                    _session?.personaNameJp?.substring(0, 1) ?? 'AI',
+                    _guestSession?.personaNameJp?.substring(0, 1) ?? _session?.personaNameJp?.substring(0, 1) ?? 'AI',
                     style: const TextStyle(
                         fontSize: 14,
                         fontWeight: FontWeight.bold,
@@ -767,13 +869,16 @@ class _ConversationScreenState extends ConsumerState<ConversationScreen> {
                   ),
                 ),
               ),
-              if (_session?.personaNameKr != null) ...[
-                const SizedBox(height: 2),
-                Text(
-                  _session!.personaNameKr!,
-                  style: const TextStyle(fontSize: 9, color: AppColors.gray500),
-                ),
-              ],
+              Builder(builder: (context) {
+                final krName = _guestSession?.personaNameKr ?? _session?.personaNameKr;
+                if (krName == null) return const SizedBox.shrink();
+                return Column(
+                  children: [
+                    const SizedBox(height: 2),
+                    Text(krName, style: const TextStyle(fontSize: 9, color: AppColors.gray500)),
+                  ],
+                );
+              }),
             ],
           ),
           const SizedBox(width: 8),

@@ -65,6 +65,8 @@ flutter pub get
 
 #### 2. 앱 빌드 및 실행
 
+***그냥 클로드 코드에게 현재 프로젝트 에뮬레이터로 실행 해달라고 하는게 속 편함. --> 로컬에 실행하기위해***
+
 프로젝트 루트 경로에서 아래 명령어를 실행합니다.
 
 flutter 빌드 명령어
@@ -102,22 +104,6 @@ flutter run -d ios
 
 # Android 에뮬레이터에서 실행
 flutter run -d android
-```
-
-### 빌드
-
-```bash
-# Android APK 빌드
-flutter build apk
-
-# Android App Bundle 빌드 (Play Store 배포용)
-flutter build appbundle
-
-# iOS 빌드
-flutter build ios
-
-# iOS IPA 빌드 (배포용)
-flutter build ipa
 ```
 
 ## 화면 구성

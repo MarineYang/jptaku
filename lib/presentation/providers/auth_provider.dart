@@ -15,6 +15,7 @@ final storageProvider = Provider<FlutterSecureStorage>((ref) {
 class AuthState {
   final bool isLoading;
   final bool isLoggedIn;
+  final bool isGuest;
   final bool isOnboarded;
   final User? user;
   final UserSettings? settings;
@@ -24,6 +25,7 @@ class AuthState {
   AuthState({
     this.isLoading = false,
     this.isLoggedIn = false,
+    this.isGuest = false,
     this.isOnboarded = false,
     this.user,
     this.settings,
@@ -34,6 +36,7 @@ class AuthState {
   AuthState copyWith({
     bool? isLoading,
     bool? isLoggedIn,
+    bool? isGuest,
     bool? isOnboarded,
     User? user,
     UserSettings? settings,
@@ -43,6 +46,7 @@ class AuthState {
     return AuthState(
       isLoading: isLoading ?? this.isLoading,
       isLoggedIn: isLoggedIn ?? this.isLoggedIn,
+      isGuest: isGuest ?? this.isGuest,
       isOnboarded: isOnboarded ?? this.isOnboarded,
       user: user ?? this.user,
       settings: settings ?? this.settings,
@@ -64,10 +68,23 @@ class AuthNotifier extends StateNotifier<AuthState> {
 
     try {
       final token = await _storage.read(key: AppConstants.accessTokenKey);
+      final isGuestStr = await _storage.read(key: AppConstants.isGuestKey);
+      final isGuest = isGuestStr == 'true';
       final prefs = await SharedPreferences.getInstance();
       final isOnboarded = prefs.getBool(AppConstants.isOnboardedKey) ?? false;
 
       if (token != null) {
+        // Guest session - no need to call getMe()
+        if (isGuest) {
+          state = state.copyWith(
+            isLoading: false,
+            isLoggedIn: true,
+            isGuest: true,
+            isOnboarded: true,
+          );
+          return;
+        }
+
         final user = await _apiService.getMe();
         if (user != null) {
           final settings = await _apiService.getSettings();
@@ -76,6 +93,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
           state = state.copyWith(
             isLoading: false,
             isLoggedIn: true,
+            isGuest: false,
             isOnboarded: isOnboarded,
             user: user,
             settings: settings,
@@ -88,14 +106,40 @@ class AuthNotifier extends StateNotifier<AuthState> {
       state = state.copyWith(
         isLoading: false,
         isLoggedIn: false,
+        isGuest: false,
         isOnboarded: isOnboarded,
       );
     } catch (e) {
       state = state.copyWith(
         isLoading: false,
         isLoggedIn: false,
+        isGuest: false,
         error: e.toString(),
       );
+    }
+  }
+
+  /// Guest login
+  Future<bool> guestLogin() async {
+    state = state.copyWith(isLoading: true);
+    try {
+      final token = await _apiService.guestLogin();
+      if (token == null) {
+        state = state.copyWith(isLoading: false, error: '비회원 로그인에 실패했습니다.');
+        return false;
+      }
+      await _storage.write(key: AppConstants.accessTokenKey, value: token);
+      await _storage.write(key: AppConstants.isGuestKey, value: 'true');
+      state = state.copyWith(
+        isLoading: false,
+        isLoggedIn: true,
+        isGuest: true,
+        isOnboarded: true,
+      );
+      return true;
+    } catch (e) {
+      state = state.copyWith(isLoading: false, error: e.toString());
+      return false;
     }
   }
 
@@ -226,8 +270,12 @@ class AuthNotifier extends StateNotifier<AuthState> {
 
   /// Logout
   Future<void> logout() async {
-    await _apiService.logout();
-    state = AuthState(isOnboarded: state.isOnboarded);
+    if (!state.isGuest) {
+      await _apiService.logout();
+    }
+    await _storage.delete(key: AppConstants.accessTokenKey);
+    await _storage.delete(key: AppConstants.isGuestKey);
+    state = AuthState(isOnboarded: state.isGuest ? false : state.isOnboarded);
   }
 }
 
